@@ -1,0 +1,59 @@
+[package]
+name = "flang"
+version = "0.1.0"
+authors = ["joajfreitas <joaj.freitas@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+rustyline = "5.0.3"
+regex = "1"
+fnv = "1.0.6"
+itertools = "0.8.0"
+num-bigint = "0.3"
+colored = "2"
+
+#[[bin]]
+#name = "step0_repl"
+#path = "step0_repl.rs"
+
+#[[bin]]
+#name = "step1_read_print"
+#path = "step1_read_print.rs"
+
+#[[bin]]
+#name = "step2_eval"
+#path = "step2_eval.rs"
+
+#[[bin]]
+#name = "step3_env"
+#path = "step3_env.rs"
+
+#[[bin]]
+#name = "step4_if_fn_do"
+#path = "step4_if_fn_do.rs"
+
+#[[bin]]
+#name = "step5_tco"
+#path = "step5_tco.rs"
+
+#[[bin]]
+#name = "step6_file"
+#path = "step6_file.rs"
+
+#[[bin]]
+#name = "step7_quote"
+#path = "step7_quote.rs"
+
+#[[bin]]
+#name = "step8_macros"
+#path = "step8_macros.rs"
+
+#[[bin]]
+#name = "step9_try"
+#path = "step9_try.rs"
+
+[[bin]]
+name = "stepA_mal"
+path = "stepA_mal.rs"
