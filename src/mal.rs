@@ -1,26 +1,36 @@
-use std::rc::Rc;
+use std::sync::Arc;
 use fnv::FnvHashMap;
 use itertools::Itertools;
-use std::net::UdpSocket;
-
-extern crate rustyline;
-extern crate itertools;
-
-use rustyline::error::ReadlineError;
-use rustyline::Editor;
-
-#[macro_use]
-mod types;
-mod reader;
-mod printer;
-mod env;
-mod core;
 
 use crate::types::{MalVal, MalArgs, MalRet, MalErr};
 use crate::types::MalErr::{ErrString, ErrMalVal};
 use crate::types::MalVal::{Bool, Func, List, MalFunc, Nil, Sym, Str, Vector, Hash};
-use crate::types::{error, format_error};
-use crate::env::{env_new, env_bind, env_set, env_sets, env_get, Env};
+use crate::types::error;
+use crate::env::{env_new, env_bind, env_set, env_get, Env, env_list_namespace};
+//use crate::core::ns;
+use crate::reader::read_str;
+
+#[macro_export]
+macro_rules! list {
+  ($seq:expr) => {{
+    List(Arc::new($seq),Arc::new(Nil))
+  }};
+  [$($args:expr),*] => {{
+    let v: Vec<MalVal> = vec![$($args),*];
+    List(Arc::new(v),Arc::new(Nil))
+  }}
+}
+
+#[macro_export]
+macro_rules! vector {
+  ($seq:expr) => {{
+    Vector(Arc::new($seq),Arc::new(Nil))
+  }};
+  [$($args:expr),*] => {{
+    let v: Vec<MalVal> = vec![$($args),*];
+    Vector(Arc::new(v),Arc::new(Nil))
+  }}
+}
 
 fn qq_iter(elts: &MalArgs) -> MalVal {
     let mut acc = list![];
@@ -103,7 +113,7 @@ fn eval_ast(ast: &MalVal, env: &Env) -> MalRet {
             for (k, v) in h.iter() {
                 hm.insert(k.to_string(), eval(v.clone(), env.clone())?);
             }
-            Ok(Hash(Rc::new(hm), Rc::new(Nil)))
+            Ok(Hash(Arc::new(hm), Arc::new(Nil)))
 
         }
         _ => Ok(ast.clone()),
@@ -148,7 +158,7 @@ fn eval(mut ast: MalVal, mut env: Env) -> MalRet {
                                     env: env.clone(),
                                     params: params,
                                     is_macro: true,
-                                    meta: Rc::new(Nil),
+                                    meta: Arc::new(Nil),
                                 };
                                 env_set(&env, l[1].clone(), f)
                             },
@@ -245,11 +255,11 @@ fn eval(mut ast: MalVal, mut env: Env) -> MalRet {
                         let (a1, a2) = (l[1].clone(), l[2].clone());
                         Ok(MalFunc {
                             eval: eval,
-                            ast: Rc::new(a2),
+                            ast: Arc::new(a2),
                             env: env.clone(),
-                            params: Rc::new(a1),
+                            params: Arc::new(a1),
                             is_macro: false,
-                            meta: Rc::new(Nil),
+                            meta: Arc::new(Nil),
                         })
                     }
                     Sym(ref a0sym) if a0sym == "eval" => {
@@ -258,6 +268,14 @@ fn eval(mut ast: MalVal, mut env: Env) -> MalRet {
                             env = e.clone();
                         }
                         continue 'tco;
+                    }
+                    Sym(ref a0sym) if a0sym == "show" => {
+                        let values = env_list_namespace(&env, l[1].to_string());
+                        Ok(vector![values
+                            .unwrap()
+                            .iter()
+                            .map(|x| Str(x.to_string()))
+                            .collect()])
                     }
                     _ => {
                         match eval_ast(&ast, &env)? {
@@ -278,7 +296,7 @@ fn eval(mut ast: MalVal, mut env: Env) -> MalRet {
                                         ast = a.clone();
                                         continue 'tco;
                                     }
-                                    _ => error("attempt to call non-function"),
+                                    _ => error(&format!("attempt to call non-function, {:?}", el)),
                                 }
                             }
                             _ => error("Expected list")
@@ -295,126 +313,28 @@ fn eval(mut ast: MalVal, mut env: Env) -> MalRet {
 
 // read
 fn read(str: &str) -> MalRet {
-    reader::read_str(str.to_string())
+    read_str(str.to_string())
 }
 
 fn print(ast: &MalVal) -> String {
-    ast.pr_str(true)
+    ast.pr_str(false)
 }
 
-fn rep(line: String, env: &Env) -> Result<String, MalErr> {
+pub fn rep(line: String, env: &Env) -> Result<String, MalErr> {
     let ast = match read(&line) {
         Ok(a) => a,
         Err(err) => return Err(err),
     };
     let exp = eval(ast, env.clone())?;
-    Ok(print(&exp))
+    let p = print(&exp);
+    Ok(p)
 }
 
-fn main() {
-
-    let repl_env = env_new(None);
-    for (k, v) in core::ns() {
-        env_sets(&repl_env, k, v);
-    }
-
-    let mut args = std::env::args();
-    let arg1 = args.nth(1);
-    let arg2 = args.nth(0);
-    let arg3 = args.nth(0);
-    env_sets(&repl_env, "*ARGV*", list!(args.map(Str).collect()));
-
-    let _= rep("(def! not (fn* (a) (if a false true)))".to_string(), &repl_env);
-    let _ = rep(
-        "(def! load-file (fn* (f) (eval (read-string (str \"(do \" (slurp f) \"\nnil)\")))))".to_string(),
-        &repl_env,
-    );
-
-    let _ = rep("(defmacro! cond (fn* (& xs) (if (> (count xs) 0) (list 'if (first xs) (if (> (count xs) 1) (nth xs 1) (throw \"odd number of forms to cond\")) (cons 'cond (rest (rest xs)))))))".to_string(), &repl_env);
-
-
-    let _ = rep("(def! *host-language* \"flang\")".to_string(), &repl_env);
+pub fn read_eval(line: String, env: &Env) -> MalRet {
+    let ast = match read(&line) {
+        Ok(a) => a,
+        Err(err) => return Err(err),
+    };
     
-    let mut cmd: String = "".to_string();
-    // Invoked with arguments
-    
-    let input = arg2.clone();
-    if let Some(f) = arg1 {
-        cmd = match &f[..] {
-            "-i" => input.unwrap(),
-            "-d" => {
-                "daemon".to_string()
-            }
-            _ => format!("(load-file \"{}\")", f),
-        };
-        
-        if cmd != "daemon" {
-            match rep(cmd, &repl_env) {
-                Ok(out) => {
-                    println!("{}", out);
-                    std::process::exit(0);
-                }
-                Err(err) => {
-                    println!("Error: {}", format_error(err));
-                    std::process::exit(1);
-                }
-            }
-        }
-    }
-    
-    let port = arg2.clone();
-    if cmd == "daemon" {
-        println!("daemon");
-        let adr = "127.0.0.1:".to_string() + &port.clone().unwrap();
-        println!("address: {}", adr);
-        let mut socket = match UdpSocket::bind(adr) {
-            Ok(socket) => socket,
-            Err(err) => {
-                println!("Error: {}", err);
-                std::process::exit(1);
-            }
-        };
-        loop {
-            let mut buf = [0; 1024];
-            let (amt, src) = socket.recv_from(&mut buf).unwrap();
-            let buf = &mut buf[..amt];
-            let out = match rep(String::from_utf8(buf.to_vec()).unwrap(), &repl_env) {
-                Ok(out) => {
-                    println!("{}", out); 
-                    out
-                },
-                Err(err) => format!("Error: {}", format_error(err))
-            };
-            socket.send_to(out.as_bytes(), &src);
-        }
-    }
-
-    // main repl loop
-    let _ = rep("(println (str \"Mal [\" *host-language* \"]\"))".to_string(), &repl_env);
-
-    let mut rl = Editor::<()>::new();
-    if rl.load_history(".flang-history").is_err() {
-        //println!("No previous history.");
-    }
-
-    loop {
-        let readline = rl.readline("user> ");
-        match readline {
-            Ok(line) => {
-                rl.add_history_entry(line.as_str());
-                rl.save_history(".flang-history").unwrap();
-                match rep(line, &repl_env) {
-                    Ok(out) => println!("{}", out),
-                    Err(err) => println!("Error: {}", format_error(err)),
-                }
-            },
-
-            Err(ReadlineError::Interrupted) => break,
-            Err(ReadlineError::Eof) => break,
-            Err(err) => {
-                println!("Error: {:?}", err);
-                break
-            }
-        }
-    }
+    eval(ast, env.clone())
 }

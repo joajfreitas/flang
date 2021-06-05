@@ -2,7 +2,7 @@ extern crate regex;
 
 use regex::{Captures, Regex};
 
-use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::types::{MalVal, MalRet, MalErr, error};
 use crate::types::MalVal::{Bool, Int, List, Nil, Str, Sym, Vector};

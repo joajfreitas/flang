@@ -1,4 +1,0 @@
-(def! fibs (fn* (n) (if (<= n 2) 1 (+ (fib (- n 1)) (fib (- n 2))))))
-(fibs 10)
-
-(do (def! y 10) (+ y 32))
