@@ -201,7 +201,10 @@ impl MalVal {
         match self {
             Str(s) => s.to_string(),
             Sym(s) => s.to_string(),
-            _ => panic!()
+            _ => {
+                println!("type: {}", self.type_info());
+                panic!();
+            }
         }
     }
 

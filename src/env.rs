@@ -147,6 +147,6 @@ pub fn env_get(env: &Env, key: &MalVal) -> MalRet {
                       .get(key)
                       .ok_or(ErrString(format!("'{}' not found", key)))?
                       .clone()),
-        _ => error(&format!("Couldn't find {}", key)),
+        _ => error(&format!("Couldn't find {}::{}", scope, key)),
     }
 }

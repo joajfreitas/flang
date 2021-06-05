@@ -12,6 +12,8 @@ use itertools::Itertools;
 
 use num_bigint::{BigInt, Sign};
 
+use std::fs;
+
 use crate::types::{
     MalVal, 
     MalErr, 
@@ -46,16 +48,8 @@ use crate::reader::read_str;
 use crate::printer::pr_seq;
 use crate::env::{env_new, env_set, env_set_from_vector, Env};
 
-/*
-macro_rules! fn_t_int_int {
-    ($ret:ident, $fn:expr) => {{
-        |a: Vec<MalVal>| match (a[0].clone(), a[1].clone()) {
-            (Int(a0), Int(a1)) => Ok($ret($fn(a0, a1))),
-            _ => error("expecting (int,int) args"),
-        }
-    }};
-}
-*/
+use crate::markdown::{markdown, front_matter};
+
 
 macro_rules! fn_t_bool_bool {
     ($ret:ident, $fn:expr) => {{
@@ -463,14 +457,11 @@ fn render(a: MalArgs) -> MalRet {
 }
 
 
-/*
- * fn mal_markdown(a: MalArgs) -> MalRet {
+fn mal_markdown(a: MalArgs) -> MalRet {
     let s = a[0].to_string();
     Ok(Hash(Arc::new(markdown(s)), Arc::new(Nil)))
 }
-*/
 
-/*
 fn mal_front_matter(a: MalArgs) -> MalRet {
    let path = match &a[0]  {
        Str(s) => s,
@@ -481,7 +472,6 @@ fn mal_front_matter(a: MalArgs) -> MalRet {
     let (_, meta) = front_matter(fs::read_to_string(path).unwrap());
     Ok(Hash(Arc::new(meta), Arc::new(Nil)))
 }
-*/
 
 fn replace(a: MalArgs) -> MalRet {
     let (s, old, new) = match (&a[0], &a[1], &a[2]) {
@@ -586,6 +576,21 @@ pub fn curl_get(a: MalArgs) -> MalRet {
         Ok(response) => Ok(Str(response.into_string().unwrap())),
         Err(Error::Status(code, _)) => error(&format!("curl::get {}", code)),
         Err(_) => error("curl::get: error acessing remote resource."),
+    }
+}
+
+pub fn dedup(a: MalArgs) -> MalRet {
+    match &a[0] {
+        List(v, _) | Vector(v, _) => {
+            let mut vec: Vec<MalVal> = Vec::new();
+            for x in &**v {
+                if !vec.contains(&x) {
+                    vec.push(x.clone())
+                }
+            }
+            Ok(vector![vec.clone()])
+        }
+        _ => error(&format!("dedup: expected List|Vector got {}", a[0].type_info())),
     }
 }
 
@@ -779,6 +784,9 @@ pub fn ns() -> Vec<(&'static str, &'static str, MalVal)> {
         ("brian", "render", func(render)),
         ("path", "join", func(path_join)),
         ("curl", "get", func(curl_get)),
+        ("mkdown", "markdown", func(mal_markdown)),
+        ("mkdown", "front_matter", func(mal_front_matter)),
+        ("list", "dedup", func(dedup)),
     ]
 }
 
