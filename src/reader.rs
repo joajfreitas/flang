@@ -5,7 +5,7 @@ use regex::{Captures, Regex};
 use std::sync::Arc;
 
 use crate::types::{MalVal, MalRet, MalErr, error};
-use crate::types::MalVal::{Bool, Int, List, Nil, Str, Sym, Vector};
+use crate::types::MalVal::{Bool, Int, List, Nil, Str, Sym};
 use crate::types::MalErr::{ErrString};
 use crate::types::{hash_map};
 
@@ -116,7 +116,7 @@ fn read_seq(reader: &mut Reader, end: &str) -> MalRet {
     let _ = reader.next();
     match end {
         ")" => Ok(list!(seq)),
-        "]" => Ok(vector!(seq)),
+        "]" => Ok(list!(seq)),
         "}" => hash_map(seq),
         _ =>  error("read_seq unknown end value"),
     }

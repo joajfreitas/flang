@@ -1,5 +1,5 @@
 use crate::types::MalVal;
-use crate::types::MalVal::{Atom, Bool, Func, Int, List, MalFunc, Nil, Str, Sym, Vector, Hash};
+use crate::types::MalVal::{Atom, Bool, Func, Int, List, MalFunc, Nil, Str, Sym, Hash};
 
 
 fn escape_str(s: &str) -> String {
@@ -34,7 +34,6 @@ impl MalVal {
             }
             Sym(s) => s.clone(),
             List(l, _) => pr_seq(l, print_readably, "(", ")", " "),
-            Vector(v, _) => pr_seq(v, print_readably, "[", "]", " "),
             Hash(hm, _) => {
                 let l: Vec<MalVal> = hm
                     .iter()
@@ -42,7 +41,7 @@ impl MalVal {
                     .collect();
                 pr_seq(&l, print_readably, "{", "}", " ")
             }
-            Func(f, _) => format!("#{:?}", f),
+            Func(f, _, _) => format!("#{:?}", f),
             MalFunc {..} => "mal function".to_string(),
             Atom(a) => format!("(atom {})", a.read().unwrap().pr_str(print_readably))
         }

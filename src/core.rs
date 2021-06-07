@@ -23,6 +23,7 @@ use crate::types::{
     hash_map, 
     _dissoc, 
     _assoc,
+    Mal
 };
 
 use crate::types::MalVal::{
@@ -31,7 +32,6 @@ use crate::types::MalVal::{
     Int, 
     Sym, 
     Str, 
-    Vector, 
     List, 
     Atom, 
     Hash, 
@@ -39,7 +39,7 @@ use crate::types::MalVal::{
     MalFunc
 };
 
-use crate::types::{error, func, int_to_bigint};
+use crate::types::{error, func, func_doc, int_to_bigint};
 use crate::types::MalErr::{ErrMalVal, ErrString};
 use crate::mal::rep;
 
@@ -49,16 +49,6 @@ use crate::printer::pr_seq;
 use crate::env::{env_new, env_set, env_set_from_vector, Env};
 
 use crate::markdown::{markdown, front_matter};
-
-
-macro_rules! fn_t_bool_bool {
-    ($ret:ident, $fn:expr) => {{
-        |a: Vec<MalVal>| match (a[0].clone(), a[1].clone()) {
-            (Bool(a0), Bool(a1)) => Ok($ret($fn(a0, a1))),
-            _ => error("expecting (bool,bool) args"),
-        }
-    }};
-}
 
 
 macro_rules! fn_str {
@@ -82,6 +72,34 @@ macro_rules! fn_is_type {
   }};
 }
 
+fn list_args(a: MalArgs) -> Result<Vec<MalVal>, MalErr> {
+    if a.len() == 0 {
+        return Err(ErrString("function requires arguments".to_string()));
+    }
+
+    Ok(match &a[0] {
+        List(v, _) => (**v).clone(),
+        _ => a.clone(),
+    })
+}
+
+fn list_ints(a: MalArgs) -> Result<Vec<BigInt>, MalErr> {
+    if a.len() == 0 {
+        return Err(ErrString("+: expected arguments".to_string()));
+    }
+
+    let vs = match &a[0] {
+        List(v, _) => (**v).clone(),
+        Int(_) => a.clone(),
+        _ => return Err(ErrString(format!("+: unexpected first argument. Expected int or List, got {}", a[0].type_info()))),
+    };
+
+    vs.iter().map(|x| match x {
+            Int(i) => Ok(i.clone()),
+            _ => return Err(ErrString(format!("+: expected int, got {}", x.type_info()))),
+        }
+    ).collect::<Result<Vec<BigInt>, MalErr>>()
+}
 
 fn slurp(f: String) -> MalRet {
     let mut s = String::new();
@@ -93,7 +111,7 @@ fn slurp(f: String) -> MalRet {
 
 fn car(a: MalArgs) -> MalRet {
     match &a[0] {
-        Vector(v, _) | List(v, _) => {
+        List(v, _) => {
             if v.len() == 0 {
                 return Ok(Nil);
             }
@@ -106,7 +124,7 @@ fn car(a: MalArgs) -> MalRet {
 
 fn cdr(a: MalArgs) -> MalRet {
     match &a[0] {
-        Vector(v, _) | List(v, _) => {
+        List(v, _) => {
             if v.len() == 0 {
                 return Ok(list![]);
             }
@@ -119,7 +137,7 @@ fn cdr(a: MalArgs) -> MalRet {
 
 fn cons(a: MalArgs) -> MalRet {
     match &a[1] {
-        List(v, _) | Vector(v, _) => {
+        List(v, _) => {
             let mut nv = vec![a[0].clone()];
             nv.extend_from_slice(v);
             Ok(list!(nv.to_vec()))
@@ -133,7 +151,6 @@ fn concat(a: MalArgs) -> MalRet {
     for seq in a.iter() {
         match seq {
             List(v, _) => nv.extend_from_slice(v),
-            Vector(v, _) => nv.extend_from_slice(v),
             _ => return error("non-seq passed to concat"),
         }
     }
@@ -144,10 +161,10 @@ fn concat(a: MalArgs) -> MalRet {
 fn flatten(a: MalArgs) -> MalRet {
     let mut nv = vec![];
     match &a[0] {
-        List(vs, _) | Vector(vs, _) =>  {
+        List(vs, _) =>  {
             for v in (**vs).clone().into_iter() {
                 match v {
-                    List(ref vec, _) | Vector(ref vec, _) => {
+                    List(ref vec, _) => {
                         for x in &**vec {
                             nv.push(x.clone());
                         }
@@ -157,7 +174,7 @@ fn flatten(a: MalArgs) -> MalRet {
                 };
             }
 
-            Ok(vector![nv])
+            Ok(list![nv])
         }
         _ => error("flatten: called with something that is not a collection"),
     }
@@ -165,15 +182,14 @@ fn flatten(a: MalArgs) -> MalRet {
 
 fn vec(a: MalArgs) -> MalRet {
     match a[0] {
-        List(ref l, _) => Ok(vector![l.to_vec()]),
-        Vector(_, _) => Ok(a[0].clone()),
+        List(ref l, _) => Ok(list![l.to_vec()]),
         _ => error("Calling vec with something that is not a vector or a list"),
     }
 }
 
 fn nth(a: MalArgs) -> MalRet {
     match (a[0].clone(), a[1].clone()) {
-        (List(seq, _), Int(idx)) | (Vector(seq, _), Int(idx)) => {
+        (List(seq, _), Int(idx)) => {
             let index: usize = match idx.to_u32_digits() {
                 (Sign::NoSign, _) => 0,
                 (_, vec) => vec[0] as usize,
@@ -189,7 +205,7 @@ fn nth(a: MalArgs) -> MalRet {
 
 fn apply(a: MalArgs) -> MalRet {
     match a[a.len() - 1] {
-        List(ref v, _) | Vector(ref v, _) => {
+        List(ref v, _) => {
             let f = &a[0];
             let mut fargs = a[1..a.len() - 1].to_vec();
             fargs.extend_from_slice(&v);
@@ -201,7 +217,7 @@ fn apply(a: MalArgs) -> MalRet {
 
 fn map(a: MalArgs) -> MalRet {
     match a[1] {
-        List(ref v, _) | Vector(ref v,_) => {
+        List(ref v, _) => {
             let mut res = vec![];
             for mv in v.iter() {
                 res.push(a[0].apply(vec![mv.clone()])?)
@@ -214,7 +230,7 @@ fn map(a: MalArgs) -> MalRet {
 
 fn filter(a: MalArgs) -> MalRet {
     match a[1] {
-        List(ref v, _) | Vector(ref v,_) => {
+        List(ref v, _) => {
             let mut res = vec![];
             for mv in v.iter() {
                 match a[0].apply(vec![mv.clone()])? {
@@ -230,7 +246,7 @@ fn filter(a: MalArgs) -> MalRet {
 
 fn reduce(a: MalArgs) -> MalRet {
     match a[1] {
-        List(ref v, _) | Vector(ref v,_) => {
+        List(ref v, _) => {
             let mut aux = v[0].clone();
             let mut iter = v.iter();
             let _ = iter.next();
@@ -240,6 +256,18 @@ fn reduce(a: MalArgs) -> MalRet {
             Ok(aux.clone())
         },
         _ => error("reduce: second argument is not a sequence"),
+    }
+}
+
+fn fold(a: MalArgs) -> MalRet {
+    if a.len() != 3 {
+        return error(&format!("fold: expected 3 arguments got {}", a.len()));
+    }
+
+    let (f, start, iter) = (a[0].clone(), a[1].clone(), a[2].clone());
+    match iter {
+        List(ref v, _) => Ok(v.iter().fold(start, |x, y| {f.apply(vec![x, y.clone()]).unwrap()})),
+        _ => error(&format!("fold: 3rd argument must be a list, got {}", a[2].type_info())),
     }
 }
 
@@ -321,8 +349,8 @@ fn time_ms(_args: MalArgs) -> MalRet {
 
 fn seq(a: MalArgs) -> MalRet {
     match a[0] {
-        List(ref v, _) | Vector(ref v, _) if v.len() == 0 => Ok(Nil),
-        List(ref v, _) | Vector(ref v, _) => Ok(list!(v.to_vec())),
+        List(ref v, _) if v.len() == 0 => Ok(Nil),
+        List(ref v, _) => Ok(list!(v.to_vec())),
         Str(ref s) if s.len() == 0 => Ok(Nil),
         Str(ref s) if !a[0].keyword_q() => {
             Ok(list!(s.chars().map(|c| { Str(c.to_string()) }).collect()))
@@ -342,7 +370,6 @@ fn conj(a: MalArgs) -> MalRet {
                 .collect::<Vec<MalVal>>();
             Ok(list!([&sl[..], v].concat()))
         }
-        Vector(ref v, _) => Ok(vector!([v, &a[1..]].concat())),
         _ => error("conj: called with non-seq"),
     }
 }
@@ -350,7 +377,7 @@ fn conj(a: MalArgs) -> MalRet {
 fn split(a: MalArgs) -> MalRet {
     match (a[0].clone(), a[1].clone()) {
         (Str(sp), Str(st)) => {
-            Ok(vector![st.split(&sp[..]).map(|a| Str(a.to_string())).collect::<Vec<MalVal>>()])
+            Ok(list![st.split(&sp[..]).map(|a| Str(a.to_string())).collect::<Vec<MalVal>>()])
         }
         _ => error("split: arguments are not strings"),
     }
@@ -366,7 +393,7 @@ fn int(a: MalArgs) -> MalRet {
 fn combinations(a:MalArgs) -> MalRet {
     let mut r = vec![];
     match (&a[0], &a[1]) {
-        (Int(n), List(v, _)) | (Int(n), Vector(v, _)) => {
+        (Int(n), List(v, _)) => {
             let (_, ns) = n.to_u32_digits();
             let n = ns[ns.len()-1];
             for c in v.iter().combinations(n as usize) {
@@ -374,9 +401,9 @@ fn combinations(a:MalArgs) -> MalRet {
                 for b in c {
                     aux.push(b.clone());
                 }
-                r.push(vector!(aux.to_vec()));
+                r.push(list!(aux.to_vec()));
             }
-            Ok(vector!(r.to_vec()))
+            Ok(list!(r.to_vec()))
         }
         _ => error("combination: Wrong set of parameters")
     }
@@ -384,7 +411,7 @@ fn combinations(a:MalArgs) -> MalRet {
 
 fn sum(a: MalArgs) -> MalRet {
     match &a[0] {
-        List(v, _) | Vector(v, _) => {
+        List(v, _) => {
             let mut aux = BigInt::new(Sign::NoSign, vec![]);
             for i in v.to_vec() {
                 match i {
@@ -401,7 +428,7 @@ fn sum(a: MalArgs) -> MalRet {
 
 fn mul(a: MalArgs) -> MalRet {
     match &a[0] {
-        List(v, _) | Vector(v, _) => {
+        List(v, _) => {
             let mut aux = BigInt::new(Sign::NoSign, vec![]);
             for i in v.to_vec() {
                 match i {
@@ -522,21 +549,12 @@ fn join(a: MalArgs) -> MalRet {
 fn mal_in(a: MalArgs) -> MalRet {
     match (&a[0], &a[1]) {
         (Str(pred) | Sym(pred), Str(string) | Sym(string)) => Ok(Bool(string.contains(pred))),
-        (_, Vector(v, _) | List(v, _)) => Ok(Bool(v.contains(&a[0]))),
+        (_, List(v, _)) => Ok(Bool(v.contains(&a[0]))),
         (_, Nil) => Ok(Bool(false)),
         (Nil, _) => Ok(Bool(false)),
         _ => return error("in: argument types do not match"),
     }
 
-}
-
-pub fn mal_not(a: MalArgs) -> MalRet {
-    let x = match &a[0] {
-        Bool(b) => !b,
-        _ => return error(""),
-    };
-
-    return Ok(Bool(x));
 }
 
 pub fn cat(a: MalArgs) -> MalRet {
@@ -581,14 +599,14 @@ pub fn curl_get(a: MalArgs) -> MalRet {
 
 pub fn dedup(a: MalArgs) -> MalRet {
     match &a[0] {
-        List(v, _) | Vector(v, _) => {
+        List(v, _) => {
             let mut vec: Vec<MalVal> = Vec::new();
             for x in &**v {
                 if !vec.contains(&x) {
                     vec.push(x.clone())
                 }
             }
-            Ok(vector![vec.clone()])
+            Ok(list![vec.clone()])
         }
         _ => error(&format!("dedup: expected List|Vector got {}", a[0].type_info())),
     }
@@ -602,11 +620,9 @@ fn mal_neq(a: MalArgs) -> MalRet {
     Ok(Bool(a[0] != a[1]))
 }
 
+
 fn mal_sum(a: MalArgs) -> MalRet {
-    match (a[0].clone(), a[1].clone()) {
-        (Int(i1), Int(i2)) => Ok(Int(i1 + i2)),
-        _ => error(&format!("+: unexpected arguments, expected (int, int) got ({}, {})", a[0].type_info(), a[1].type_info())),
-    }
+    Ok(list_args(a)?.iter().fold(0.to_mal(), |x, y| {x + y.clone()}))
 }
 
 fn mal_diff(a: MalArgs) -> MalRet {
@@ -617,18 +633,7 @@ fn mal_diff(a: MalArgs) -> MalRet {
 }
 
 fn mal_product(a: MalArgs) -> MalRet {
-    match (a[0].clone(), a[1].clone()) {
-        (Int(i1), Int(i2)) => {
-            match i1.checked_mul(&i2) {
-                Some(v) => Ok(Int(v)),
-                None => error(&format!("*: failed to multiply, ({}, {})", i1, i2))
-            }
-        }
-        _ => error(
-            &format!("*: unexpected arguments, expected (int, int) got ({}, {})", 
-                a[0].type_info(), 
-                a[1].type_info())),
-    }
+    Ok(Int(list_ints(a)?.iter().fold(int_to_bigint(1), |x, y| {x*y}).clone()))
 }
 
 fn mal_div(a: MalArgs) -> MalRet {
@@ -668,32 +673,77 @@ fn mal_le(a: MalArgs) -> MalRet {
     }
 }
 
+fn mal_not(a: MalArgs) -> MalRet {
+    if a.len() != 1 {
+        return error(&format!("not: expected 1 argument received {}", a.len()));
+    }
+    (!(a[0].clone()))
+        .error_nil("not: received something that is not a Boolean.")
+}
+
+fn mal_and(a: MalArgs) -> MalRet {
+    let args = list_args(a);
+    (args?.iter().fold(Bool(true), |x, y| {x & y.clone()}))
+        .error_nil("and: received something that is not a Boolean.")
+}
+
+fn mal_or(a: MalArgs) -> MalRet {
+    let args = list_args(a);
+    (args?.iter().fold(Bool(false), |x, y| {x | y.clone()}))
+        .error_nil("or: received something that is not a Boolean.")
+}
+
+fn mal_nand(a: MalArgs) -> MalRet {
+    let args = list_args(a);
+    (!args?.iter().fold(Bool(true), |x, y| {x & y.clone()}))
+        .error_nil("nand: received something that is not a Boolean.")
+}
+
+fn mal_nor(a: MalArgs) -> MalRet {
+    let args = list_args(a);
+    (!args?.iter().fold(Bool(false), |x, y| {x | y.clone()}))
+        .error_nil("nor: received something that is not a Boolean.")
+}
+
+fn mal_xor(a: MalArgs) -> MalRet {
+    let args = list_args(a);
+    (args?.iter().fold(Bool(false), |x, y| {x ^ y.clone()}))
+        .error_nil("xor: received something that is not a Boolean.")
+}
+
+fn mal_xnor(a: MalArgs) -> MalRet {
+    let args = list_args(a);
+    (!args?.iter().fold(Bool(false), |x, y| {x ^ y.clone()}))
+        .error_nil("xnor: received something that is not a Boolean.")
+}
+
 pub fn ns() -> Vec<(&'static str, &'static str, MalVal)> {
     vec![
         ("", "throw", func(|a| Err(ErrMalVal(a[0].clone())))),
-        ("", "=", func(mal_eq)),
-        ("", "!=", func(mal_neq)),
-        ("", "+", func(mal_sum)),
-        ("", "-", func(mal_diff)),
-        ("", "*", func(mal_product)),
-        ("", "/", func(mal_div)),
-        ("", ">", func(mal_bt)),
-        ("", ">=", func(mal_be)),
-        ("", "<", func(mal_lt)),
-        ("", "<=", func(mal_le)),
-        ("mal", "in", func(mal_in)),
-        ("", "not", func(mal_not)),
-        ("", "and", func(fn_t_bool_bool!(Bool, |i, j| {i && j}))),
-        ("", "or", func(fn_t_bool_bool!(Bool, |i, j| {i || j}))),
-        ("", "nand", func(fn_t_bool_bool!(Bool, |i, j| {!(i && j)}))),
-        ("", "nor", func(fn_t_bool_bool!(Bool, |i, j| {!(i || j)}))),
-        ("", "xor", func(fn_t_bool_bool!(Bool, |i, j| {i ^ j}))),
-        ("", "xnor", func(fn_t_bool_bool!(Bool, |i, j| {!((i ^ j) as bool)}))),
-        ("", "list", func(|a| {Ok(list!(a))})),
-        ("", "list?", func(fn_is_type!(List(_, _)))),
-        ("", "empty?", func(|a| a[0].empty_q())),
+        ("", "=", func_doc(mal_eq, "Equality check.")),
+        ("", "!=", func_doc(mal_neq, "Inequality check.")),
+        ("", "+", func_doc(mal_sum, "Numeric sum.")),
+        ("", "-", func_doc(mal_diff, "Numeric difference.")),
+        ("", "*", func_doc(mal_product, "Numeric product.")),
+        ("", "/", func_doc(mal_div, "Numeric division.")),
+        ("", ">", func_doc(mal_bt, "Greater than check.")),
+        ("", ">=", func_doc(mal_be, "Greater or equal check.")),
+        ("", "<", func_doc(mal_lt, "Lesser than check.")),
+        ("", "<=", func_doc(mal_le, "Lesser or equal check.")),
+        ("mal", "in", func_doc(mal_in, "Check that value exists in collection.")),
+        ("", "not", func_doc(mal_not, "Logical not.")),
+        ("", "!", func_doc(mal_not, "Logical not.")),
+        ("", "and", func_doc(mal_and, "Logical and.")),
+        ("", "or", func_doc(mal_or, "Logical or.")),
+        ("", "nand", func_doc(mal_nand, "Logical nand.")),
+        ("", "nor", func_doc(mal_nor, "Logical nor.")),
+        ("", "xor", func_doc(mal_xor, "Logical xor.")),
+        ("", "xnor", func_doc(mal_xnor, "Logical xnor.")),
+        ("", "list", func_doc(|a| {Ok(list!(a))}, "Make list.")),
+        ("", "list?", func_doc(fn_is_type!(List(_, _)), "Is list?.")),
+        ("", "empty?", func_doc(|a| a[0].empty_q(), "Is empty?.")),
         ("", "!empty?", func(not_empty)),
-        ("", "count", func(|a| a[0].count())),
+        ("", "count", func_doc(|a| a[0].count(), "Count elements in collection.")),
         ("", "pr-str", func(|a| Ok(Str(pr_seq(&a, true, "", "", " "))))),
         ("", "str", func(|a| Ok(Str(pr_seq(&a, false, "", "", ""))))),
         ("", 
@@ -738,19 +788,19 @@ pub fn ns() -> Vec<(&'static str, &'static str, MalVal)> {
         ("", "map", func(map)),
         ("", "filter", func(filter)),
         ("", "reduce", func(reduce)),
+        ("", "fold", func(fold)),
         ("", "nil?", func(fn_is_type!(Nil))),
         ("", "true?", func(fn_is_type!(Bool(true)))),
         ("", "false?", func(fn_is_type!(Bool(false)))),
         ("", "symbol?", func(fn_is_type!(Sym(_)))),
         ("", "symbol", func(symbol)),
         ("", "keyword", func(|a| a[0].keyword())),
-        ("",
-            "keyword?",
+        ("", "keyword?",
             func(fn_is_type!(Str(ref s) if s.starts_with("\u{29e}"))),
         ),
-        ("", "vector", func(|a| Ok(vector!(a)))),
-        ("", "vector?", func(fn_is_type!(Vector(_, _)))),
-        ("", "sequential?", func(fn_is_type!(List(_, _), Vector(_, _)))),
+        ("", "vector", func(|a| Ok(list!(a)))),
+        ("", "vector?", func(fn_is_type!(List(_, _)))),
+        ("", "sequential?", func(fn_is_type!(List(_, _)))),
         ("", "hash-map", func(|a| hash_map(a))),
         ("", "map?", func(fn_is_type!(Hash(_, _)))),
         ("", "assoc", func(assoc)),
@@ -763,7 +813,7 @@ pub fn ns() -> Vec<(&'static str, &'static str, MalVal)> {
         ("", "time-ms", func(time_ms)),
         ("", "meta", func(|a| a[0].get_meta())),
         ("", "with-meta", func(|a| a[0].clone().with_meta(&a[1]))),
-        ("", "fn?", func(fn_is_type!(MalFunc{is_macro,..} if !is_macro,Func(_,_)))),
+        ("", "fn?", func(fn_is_type!(MalFunc{is_macro,..} if !is_macro,Func(_,_,_)))),
         ("", "string?", func(fn_is_type!(Str(ref s) if !s.starts_with("\u{29e}")))),
         ("", "number?", func(fn_is_type!(Int(_)))),
         ("", "seq", func(seq)),
@@ -800,7 +850,7 @@ pub fn env_core() -> Env {
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
-    use crate::types::to_mal_int;
+    use crate::types::Mal;
     use proptest::prelude::*;
 
 
@@ -811,24 +861,24 @@ mod tests {
 
         assert_eq!(
             rep("(flatten (list 1 2 (list 3 4)))".to_string(), &env).unwrap(), 
-            "[1 2 3 4]");
+            "(1 2 3 4)");
     }
 
     #[test]
     fn test_flatten() {
         let s = Str("ola".to_string());
-        let a = to_mal_int(1);
-        let b = to_mal_int(3);
-        let c = to_mal_int(3);
+        let a = 1.to_mal();
+        let b = 2.to_mal();
+        let c = 3.to_mal();
 
         let v: Vec<MalVal> = vec![
             s.clone(), 
-            vector![vec![a.clone(), b.clone(), c.clone()]]];
+            list![vec![a.clone(), b.clone(), c.clone()]]];
 
         let result: Vec<MalVal> = vec![s, a, b, c];
 
-        let result = vector![result];
-        assert_eq!(flatten(vec![vector![v]]).unwrap(), result);
+        let result = list![result];
+        assert_eq!(flatten(vec![list![v]]).unwrap(), result);
     }
 
     #[test]
@@ -850,81 +900,81 @@ mod tests {
     proptest! {
         #[test]
         fn test_eq_prop(a in any::<i32>()) {
-            prop_assert_eq!(mal_eq(vec![to_mal_int(a), to_mal_int(a)]).unwrap(), Bool(true));
+            prop_assert_eq!(mal_eq(vec![a.to_mal(), a.to_mal()]).unwrap(), Bool(true));
         }
         
         #[test]
         fn test_neq_prop(a in any::<i32>()) {
-            prop_assert_eq!(mal_neq(vec![to_mal_int(a), to_mal_int(a)]).unwrap(), Bool(false));
+            prop_assert_eq!(mal_neq(vec![a.to_mal(), a.to_mal()]).unwrap(), Bool(false));
         }
 
         #[test]
         fn test_sum_prop(a in half_size(), b in half_size()) {
-            let x = to_mal_int(a);
-            let y = to_mal_int(b);
-            prop_assert_eq!(mal_sum(vec![x,y]).unwrap(), to_mal_int(a+b));
+            let x = a.to_mal();
+            let y = b.to_mal();
+            prop_assert_eq!(mal_sum(vec![x,y]).unwrap(), (a+b).to_mal());
         }
 
         #[test]
         fn test_diff_prop(a in half_size(), b in half_size()) {
-            let x = to_mal_int(a);
-            let y = to_mal_int(b);
-            prop_assert_eq!(mal_diff(vec![x,y]).unwrap(), to_mal_int(a-b));
+            let x = a.to_mal();
+            let y = b.to_mal();
+            prop_assert_eq!(mal_diff(vec![x,y]).unwrap(), (a-b).to_mal());
         }
 
         #[test]
         fn test_product_prop(a in sqrt_size(), b in sqrt_size()) {
-            let x = to_mal_int(a);
-            let y = to_mal_int(b);
-            prop_assert_eq!(mal_product(vec![x,y]).unwrap(), to_mal_int(a*b));
+            let x = a.to_mal();
+            let y = b.to_mal();
+            prop_assert_eq!(mal_product(vec![x,y]).unwrap(), (a*b).to_mal());
         }
 
         #[test]
         fn test_div_prop(a in any::<i32>(), b in any::<i32>()) {
-            let x = to_mal_int(a);
-            let y = to_mal_int(b);
-            prop_assert_eq!(mal_div(vec![x,y]).unwrap(), to_mal_int(a/b));
+            let x = a.to_mal();
+            let y = b.to_mal();
+            prop_assert_eq!(mal_div(vec![x,y]).unwrap(), (a/b).to_mal());
         }
 
         #[test]
         fn test_lt_prop(a in any::<i32>(), b in any::<i32>()) {
-            let x = to_mal_int(a);
-            let y = to_mal_int(b);
+            let x = a.to_mal();
+            let y = b.to_mal();
             prop_assert_eq!(mal_lt(vec![x,y]).unwrap(), Bool(a < b));
         }
 
         #[test]
         fn test_bt_prop(a in any::<i32>(), b in any::<i32>()) {
-            let x = to_mal_int(a);
-            let y = to_mal_int(b);
+            let x = a.to_mal();
+            let y = b.to_mal();
             prop_assert_eq!(mal_bt(vec![x,y]).unwrap(), Bool(a > b));
         }
 
         #[test]
         fn test_le_prop(a in any::<i32>(), b in any::<i32>()) {
-            let x = to_mal_int(a);
-            let y = to_mal_int(b);
+            let x = a.to_mal();
+            let y = b.to_mal();
             prop_assert_eq!(mal_le(vec![x,y]).unwrap(), Bool(a <= b));
         }
 
         #[test]
         fn test_be_prop(a in any::<i32>(), b in any::<i32>()) {
-            let x = to_mal_int(a);
-            let y = to_mal_int(b);
+            let x = a.to_mal();
+            let y = b.to_mal();
             prop_assert_eq!(mal_be(vec![x,y]).unwrap(), Bool(a >= b));
         }
 
         #[test]
         fn test_bt_le_prop(a in any::<i32>(), b in any::<i32>()) {
-            let x = to_mal_int(a);
-            let y = to_mal_int(b);
+            let x = a.to_mal();
+            let y = b.to_mal();
             prop_assert_ne!(mal_bt(vec![x.clone(),y.clone()]).unwrap(), mal_le(vec![x,y]).unwrap());
         }
 
         #[test]
         fn test_be_lt_prop(a in any::<i32>(), b in any::<i32>()) {
-            let x = to_mal_int(a);
-            let y = to_mal_int(b);
+            let x = a.to_mal();
+            let y = b.to_mal();
             prop_assert_ne!(mal_be(vec![x.clone(),y.clone()]).unwrap(), mal_lt(vec![x,y]).unwrap());
         }
     }

@@ -3,6 +3,8 @@ use rustyline::Editor;
 
 use std::sync::Arc;
 
+use colored::*;
+
 use mal::mal::rep;
 use mal::list;
 use mal::core::env_core;
@@ -28,16 +30,23 @@ fn main() {
     if rl.load_history(".flang-history").is_err() {
         //println!("No previous history.");
     }
-
+    
+    let mut prompt: String = "user> ".to_string();
     loop {
-        let readline = rl.readline("user> ");
+        let readline = rl.readline(&prompt);
         match readline {
             Ok(line) => {
                 rl.add_history_entry(line.as_str());
                 rl.save_history(".flang-history").unwrap();
                 match rep(line, &repl_env) {
-                    Ok(out) => println!("{}", out),
-                    Err(err) => println!("Error: {}", format_error(err)),
+                    Ok(out) => {
+                        prompt = "user> ".to_string();
+                        println!("{}", out);
+                    },
+                    Err(err) => {
+                        prompt = "error> ".red().to_string();
+                        println!("{}", format_error(err));
+                    }
                 }
             },
 

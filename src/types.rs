@@ -1,12 +1,12 @@
 use std::sync::Arc;
 use std::sync::RwLock;
+use std::ops::{Add, BitAnd, BitOr, BitXor, Not};
 use itertools::Itertools;
-use colored::*;
 
 use fnv::FnvHashMap;
 use num_bigint::{BigInt, Sign};
 
-use crate::types::MalVal::{Atom, Bool, Func, Int, List, MalFunc, Nil, Str, Sym, Vector, Hash};
+use crate::types::MalVal::{Atom, Bool, Func, Int, List, MalFunc, Nil, Str, Sym, Hash};
 use crate::types::MalErr::{ErrString};
 use crate::env::{Env, env_bind};
 
@@ -18,9 +18,9 @@ pub enum MalVal {
     Str(String),
     Sym(String),
     List(Arc<Vec<MalVal>>, Arc<MalVal>),
-    Vector(Arc<Vec<MalVal>>, Arc<MalVal>),
+    //Vector(Arc<Vec<MalVal>>, Arc<MalVal>),
     Hash(Arc<FnvHashMap<String, MalVal>>, Arc<MalVal>),
-    Func(fn(MalArgs) -> MalRet, Arc<MalVal>),
+    Func(fn(MalArgs) -> MalRet, Arc<MalVal>, Arc<MalVal>),
     MalFunc {
         eval: fn(ast: MalVal, env: Env) -> MalRet,
         ast: Arc<MalVal>,
@@ -28,6 +28,7 @@ pub enum MalVal {
         params: Arc<MalVal>,
         is_macro: bool,
         meta: Arc<MalVal>,
+        doc: Arc<MalVal>,
     },
     Atom(Arc<RwLock<MalVal>>),
 }
@@ -47,13 +48,17 @@ pub fn error(s: &str) -> MalRet {
 
 pub fn format_error(e: MalErr) -> String {
     match e {
-        MalErr::ErrString(s) => format!("{}: {}", "Error".red(), s.clone()),
+        MalErr::ErrString(s) => s.clone(),
         MalErr::ErrMalVal(v) => v.pr_str(true),
     }
 }
 
 pub fn func(f: fn(MalArgs) -> MalRet) -> MalVal {
-    Func(f, Arc::new(Nil))
+    Func(f, Arc::new(Nil), Arc::new(Str("Placeholder".to_string())))
+}
+
+pub fn func_doc(f: fn(MalArgs) -> MalRet, doc: &str) -> MalVal {
+    Func(f, Arc::new(Nil), Arc::new(Str(doc.to_string())))
 }
 
 pub fn atom(mv: &MalVal) -> MalVal{
@@ -71,11 +76,6 @@ pub fn int_to_bigint(i: i64) -> BigInt {
         BigInt::new(Sign::NoSign, vec![])
     }
 }
-
-pub fn to_mal_int(i: i32) -> MalVal {
-    Int(int_to_bigint(i as i64))
-}
-
 
 impl MalVal {
     pub fn keyword(&self) -> MalRet {
@@ -95,7 +95,7 @@ impl MalVal {
 
     pub fn apply(&self, args: MalArgs) -> MalRet {
         match *self {
-            Func(f, _) => f(args),
+            Func(f, _, _) => f(args),
             MalFunc {
                 eval, 
                 ref ast, 
@@ -113,7 +113,7 @@ impl MalVal {
 
     pub fn empty_q(&self) -> MalRet {
         match self {
-            List(l, _) | Vector(l, _) => Ok(Bool(l.len() == 0)),
+            List(l, _) => Ok(Bool(l.len() == 0)),
             Str(s) => Ok(Bool(s.len() == 0)),
             Nil => Ok(Bool(true)),
             _ => error("invalid type for empty?"),
@@ -122,7 +122,7 @@ impl MalVal {
 
     pub fn count(&self) -> MalRet {
         match self {
-            List(ls,  _) | Vector(ls, _) => Ok(Int(BigInt::new(Sign::Plus, vec![ls.len() as u32]))),
+            List(ls,  _) => Ok(Int(BigInt::new(Sign::Plus, vec![ls.len() as u32]))),
             Nil => Ok(Int(BigInt::new(Sign::NoSign, vec![0]))),
             _ => error("invalid type for count"),
         }
@@ -160,8 +160,8 @@ impl MalVal {
 
     pub fn get_meta(&self) -> MalRet {
         match self {
-            List(_, meta) | Vector(_, meta) | Hash(_, meta) => Ok((&**meta).clone()),
-            Func(_, meta) => Ok((&**meta).clone()),
+            List(_, meta) | Hash(_, meta) => Ok((&**meta).clone()),
+            Func(_, meta, _) => Ok((&**meta).clone()),
             MalFunc { meta, .. } => Ok((&**meta).clone()),
             _ => error("meta not supported by type"),
         }
@@ -170,9 +170,8 @@ impl MalVal {
     pub fn with_meta(&mut self, new_meta: &MalVal) -> MalRet {
         match self {
             List(_, ref mut meta)
-            | Vector(_, ref mut meta)
             | Hash(_, ref mut meta)
-            | Func(_, ref mut meta)
+            | Func(_, ref mut meta, _)
             | MalFunc { ref mut meta, .. } => {
                 *meta = Arc::new((&*new_meta).clone());
             }
@@ -189,9 +188,8 @@ impl MalVal {
             Str(_) => "str".to_string(),
             Sym(_) => "sym".to_string(),
             List(_,_) => "list".to_string(),
-            Vector(_,_) => "vector".to_string(),
             Hash(_,_) => "hash".to_string(),
-            Func(_,_) => "func".to_string(),
+            Func(_,_,_) => "func".to_string(),
             MalFunc {..} => "mal_func".to_string(),
             Atom(_) => "atom".to_string(),
         }
@@ -214,6 +212,13 @@ impl MalVal {
             _ => panic!(),
         }
     }
+
+    pub fn error_nil(&self, s: &str) -> MalRet {
+        match self {
+            Nil => Err(ErrString(s.to_string())),
+            _ => Ok(self.clone()),
+        }
+    }
 }
 
 impl PartialEq for MalVal {
@@ -224,10 +229,7 @@ impl PartialEq for MalVal {
             (Int(ref a), Int(ref b)) => a == b,
             (Str(ref a), Str(ref b)) => a == b,
             (Sym(ref a), Sym(ref b)) => a == b,
-            (List(ref a, _), List(ref b, _))
-            | (Vector(ref a, _), Vector(ref b, _))
-            | (List(ref a, _), Vector(ref b, _))
-            | (Vector(ref a, _), List(ref b, _)) => a == b,
+            (List(ref a, _), List(ref b, _)) => a == b,
             (Hash(ref a, _), Hash(ref b, _)) => a == b,
             (MalFunc { .. }, MalFunc { .. }) => false,
             _ => false,
@@ -270,3 +272,67 @@ pub fn hash_map(kvs: MalArgs) -> MalRet {
     _assoc(hm, kvs)
 }
 
+pub trait Mal {
+    fn to_mal(&self) -> MalVal;
+}
+
+impl Mal for i32 {
+    fn to_mal(&self) -> MalVal {
+        Int(int_to_bigint(self.clone() as i64))
+    }
+}
+
+impl Add for MalVal {
+    type Output = Self;
+    fn add(self, other: Self) -> Self {
+        match (self, other) {
+            (Int(i1), Int(i2)) => Int(i1+i2),
+            _ => Nil,
+        }
+    }
+}
+
+impl BitAnd for MalVal {
+    type Output = Self;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Bool(b1), Bool(b2)) => Bool(b1 && b2),
+            _ => Nil
+        }
+    }
+}
+
+impl BitOr for MalVal {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Bool(b1), Bool(b2)) => Bool(b1 || b2),
+            _ => Nil
+        }
+    }
+}
+
+impl Not for MalVal {
+    type Output = Self;
+
+    fn not(self) -> Self::Output {
+        match self {
+            Bool(true) => Bool(false),
+            Bool(false) => Bool(true),
+            _ => Nil,
+        }
+    }
+}
+
+impl BitXor for MalVal {
+    type Output = Self;
+
+    fn bitxor(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Bool(b1), Bool(b2)) => Bool(b1 ^ b2),
+            _ => Nil,
+        }
+    }
+}
