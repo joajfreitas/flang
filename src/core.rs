@@ -2,6 +2,10 @@ use log::error;
 use regex::Regex;
 use dyn_fmt::AsStrFormatExt;
 use ureq::Error;
+use fnv::FnvHashMap;
+
+use serde_json::{self, Value, Number};
+use serde_json::map::Map;
 
 use std::fs::File;
 use std::io::Read;
@@ -9,8 +13,6 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use itertools::Itertools;
-
-use num_bigint::{BigInt, Sign};
 
 use std::fs;
 
@@ -23,23 +25,25 @@ use crate::types::{
     hash_map, 
     _dissoc, 
     _assoc,
-    Mal
+    Mal,
 };
 
 use crate::types::MalVal::{
     Nil, 
     Bool, 
     Int, 
+    Float,
     Sym, 
     Str, 
     List, 
     Atom, 
     Hash, 
     Func, 
-    MalFunc
+    MalFunc,
+    Generator,
 };
 
-use crate::types::{error, func, func_doc, int_to_bigint};
+use crate::types::{error, func, func_doc};
 use crate::types::MalErr::{ErrMalVal, ErrString};
 use crate::mal::rep;
 
@@ -83,30 +87,92 @@ fn list_args(a: MalArgs) -> Result<Vec<MalVal>, MalErr> {
     })
 }
 
-fn list_ints(a: MalArgs) -> Result<Vec<BigInt>, MalErr> {
-    if a.len() == 0 {
-        return Err(ErrString("+: expected arguments".to_string()));
-    }
-
-    let vs = match &a[0] {
-        List(v, _) => (**v).clone(),
-        Int(_) => a.clone(),
-        _ => return Err(ErrString(format!("+: unexpected first argument. Expected int or List, got {}", a[0].type_info()))),
-    };
-
-    vs.iter().map(|x| match x {
-            Int(i) => Ok(i.clone()),
-            _ => return Err(ErrString(format!("+: expected int, got {}", x.type_info()))),
-        }
-    ).collect::<Result<Vec<BigInt>, MalErr>>()
-}
-
 fn slurp(f: String) -> MalRet {
     let mut s = String::new();
     match File::open(f.to_string()).and_then(|mut f| f.read_to_string(&mut s)) {
         Ok(_) => Ok(Str(s)),
         Err(e) => {println!("slurp: {}", e.to_string()); error(&format!("slurp: {}", &e.to_string()))},
     }
+}
+
+fn mal_write(a: MalArgs) -> MalRet {
+    let (file, txt) = match (&a[0], &a[1]) {
+        (Str(s1), Str(s2)) => (s1,s2),
+        _ => return error(&format!("write: expected (string, string) got ({}, {})", a[0].type_info(), a[1].type_info())),
+    };
+
+    match fs::write(file, txt) {
+        Ok(()) => Ok(Nil),
+        Err(err) => {
+            println!("{:?}", err);
+            panic!();
+        }
+    }
+}
+
+fn mal_os_list_dir(a: MalArgs) -> MalRet {
+    let mut dir = ".";
+    if a.len() != 0 {
+        match &a[0] {
+            Str(s) => dir = s,
+            _ => return error(&format!("ls: expected (string), got ({})", a[0].type_info())),
+        };
+    }
+
+
+    Ok(list![(fs::read_dir(dir).unwrap().map(|x| Str(x.unwrap().path().display().to_string()))).collect()])
+}
+
+fn generator_init(a: MalArgs) -> MalRet {
+    match (&a[0], &[1]) {
+        (MalFunc {..}, _) => Ok(Generator(Arc::new(a[0].clone()), Arc::new(a[1].clone()))),
+        _ => error(&format!("gen-init: expected(functon, value), got ({}, {})", a[0].type_info(), a[1].type_info())),
+    }
+}
+
+fn eval_generator(f: MalVal, start: MalVal) -> MalRet {
+    let args = vec![start.clone()];
+    f.apply(args)
+}
+
+fn eval_gen(a: MalArgs) -> MalRet {
+    let (f, start) = match &a[0] {
+        Generator(f, start) => ((**f).clone(), (**start).clone()),
+        _ => return error(&format!("peek: expects a generator, got {}", a[0].type_info())),
+    };
+
+    let next = eval_generator(f.clone(), start);
+
+    Ok(Generator(Arc::new(f.clone()), Arc::new(next.unwrap())))
+}
+
+fn peek(a: MalArgs) -> MalRet {
+    let (f, start) = match &a[0] {
+        Generator(f, start) => ((**f).clone(), (**start).clone()),
+        _ => return error(&format!("peek: expects a generator, got {}", a[0].type_info())),
+    };
+
+    eval_generator(f, start)
+}
+
+fn list(a: MalArgs) -> MalRet {
+    let (f, start) = match &a[0] {
+        Generator(f, start) => ((**f).clone(), (**start).clone()),
+        _ => return error(&format!("list: expects a generator, got {}", a[0].type_info())),
+    };
+
+    let mut next = start;
+    let mut vs: Vec<MalVal> = Vec::new();
+    loop {
+        let aux = eval_generator(f.clone(), next.clone());
+        next = aux.unwrap();
+        if next == Nil {
+            break;
+        }
+        vs.push(next.clone());
+    }
+
+    Ok(list!(vs))
 }
 
 fn car(a: MalArgs) -> MalRet {
@@ -190,14 +256,10 @@ fn vec(a: MalArgs) -> MalRet {
 fn nth(a: MalArgs) -> MalRet {
     match (a[0].clone(), a[1].clone()) {
         (List(seq, _), Int(idx)) => {
-            let index: usize = match idx.to_u32_digits() {
-                (Sign::NoSign, _) => 0,
-                (_, vec) => vec[0] as usize,
-            };
-            if seq.len() <= index  {
+            if seq.len() <= (idx as usize) {
                 return error("nth: index out of range");
             }
-            Ok(seq[index].clone())
+            Ok(seq[idx as usize].clone())
         }
         _=> error("invalid args to nth"),
     }
@@ -271,6 +333,15 @@ fn fold(a: MalArgs) -> MalRet {
     }
 }
 
+fn range(a: MalArgs) -> MalRet {
+    match (&a[0], &a[1]) {
+        (Int(i1), Int(i2)) => {
+            Ok(list![(*i1..*i2).map(|x| x.to_mal()).collect::<Vec<MalVal>>()])
+        },
+        _ => error(&format!("range: expected (int, int) ({}, {})", a[0].type_info(), a[1].type_info())),
+    }
+}
+
 fn symbol(a: MalArgs) -> MalRet {
     match &a[0] {
         Str(s) => Ok(Sym(s.to_string())),
@@ -317,7 +388,7 @@ fn contains_q(a: MalArgs) -> MalRet {
 fn keys(a: MalArgs) -> MalRet {
     match a[0] {
         Hash(ref hm, _) => Ok(list!(hm.keys().map(|k| { Str(k.to_string()) }).collect())),
-        _ => error("keys requires Hash Map"),
+        _ => error(&format!("keys requires Hash Map, got {}", a[0].type_info())),
     }
 }
 
@@ -335,16 +406,16 @@ fn time_ms(_args: MalArgs) -> MalRet {
         .duration_since(UNIX_EPOCH)
         .expect("Time went backwards");
     
-    let millis = since_the_epoch.as_millis();
+    let millis = since_the_epoch.as_millis() as i64;
 
-    let mut v: Vec<u32> = vec![];
-    v.push(((millis >> 00) & 0xFFFFFFFF) as u32);
-    v.push(((millis >> 32) & 0xFFFFFFFF) as u32);
-    v.push(((millis >> 64) & 0xFFFFFFFF) as u32);
-    v.push(((millis >> 96) & 0xFFFFFFFF) as u32);
+    //let mut v: Vec<u32> = vec![];
+    //v.push(((millis >> 00) & 0xFFFFFFFF) as u32);
+    //v.push(((millis >> 32) & 0xFFFFFFFF) as u32);
+    //v.push(((millis >> 64) & 0xFFFFFFFF) as u32);
+    //v.push(((millis >> 96) & 0xFFFFFFFF) as u32);
 
-    Ok(Int(BigInt::new(Sign::Plus, v)))
-    //Ok(Int(millis as i64))
+    //Ok(Int(BigInt::new(Sign::Plus, v)))
+    Ok(Int(millis))
 }
 
 fn seq(a: MalArgs) -> MalRet {
@@ -385,7 +456,7 @@ fn split(a: MalArgs) -> MalRet {
 
 fn int(a: MalArgs) -> MalRet {
     match &a[0] {
-        Str(s) => Ok(Int(int_to_bigint(s.parse::<i64>().unwrap()))),
+        Str(s) => Ok(Int(s.parse::<i64>().unwrap())),
         _ => error("int: not implemented"),
     }
 }
@@ -394,9 +465,7 @@ fn combinations(a:MalArgs) -> MalRet {
     let mut r = vec![];
     match (&a[0], &a[1]) {
         (Int(n), List(v, _)) => {
-            let (_, ns) = n.to_u32_digits();
-            let n = ns[ns.len()-1];
-            for c in v.iter().combinations(n as usize) {
+            for c in v.iter().combinations(*n as usize) {
                 let mut aux = vec![];
                 for b in c {
                     aux.push(b.clone());
@@ -412,7 +481,7 @@ fn combinations(a:MalArgs) -> MalRet {
 fn sum(a: MalArgs) -> MalRet {
     match &a[0] {
         List(v, _) => {
-            let mut aux = BigInt::new(Sign::NoSign, vec![]);
+            let mut aux: i64 = 0;
             for i in v.to_vec() {
                 match i {
                     Int(i) => aux = aux + i,
@@ -429,7 +498,7 @@ fn sum(a: MalArgs) -> MalRet {
 fn mul(a: MalArgs) -> MalRet {
     match &a[0] {
         List(v, _) => {
-            let mut aux = BigInt::new(Sign::NoSign, vec![]);
+            let mut aux = 0;
             for i in v.to_vec() {
                 match i {
                     Int(i) => aux = aux * i,
@@ -516,7 +585,7 @@ fn replace(a: MalArgs) -> MalRet {
     Ok(Str(s.replace(old, new)))
 }
 
-fn format(a: MalArgs) -> MalRet {
+fn mal_format(a: MalArgs) -> MalRet {
     let mut strs: Vec<&str> = Vec::new();
     let fmt = match &a[0] {
         Str(s) => s,
@@ -633,7 +702,7 @@ fn mal_diff(a: MalArgs) -> MalRet {
 }
 
 fn mal_product(a: MalArgs) -> MalRet {
-    Ok(Int(list_ints(a)?.iter().fold(int_to_bigint(1), |x, y| {x*y}).clone()))
+    Ok(list_args(a)?.iter().fold(1.to_mal(), |x, y| {x*y.clone()}).clone())
 }
 
 fn mal_div(a: MalArgs) -> MalRet {
@@ -717,6 +786,70 @@ fn mal_xnor(a: MalArgs) -> MalRet {
         .error_nil("xnor: received something that is not a Boolean.")
 }
 
+fn json_visiter(v: Value) -> MalRet {
+    let value = match v {
+        Value::Null => Nil,
+        Value::Bool(b) => Bool(b),
+        Value::String(s) => Str(s),
+        Value::Number(i) => i.as_i64().unwrap().to_mal(),
+        Value::Array(vs) => {
+            let mut xs: Vec<MalVal> = Vec::new();
+            for x in vs {
+                xs.push(json_visiter(x).unwrap());
+            }
+            list!(xs)
+        },
+        Value::Object(obj) => {
+            let mut hm = FnvHashMap::default();
+
+            for (k,v) in obj.clone() {
+                hm.insert(k.clone(), json_visiter(v).unwrap());
+            }
+            Hash(Arc::new(hm), Arc::new(Nil))
+        }
+    };
+    Ok(value)
+}
+
+fn json_load(a: MalArgs) -> MalRet {
+    let v: Value = match &a[0] {
+        Str(s) => serde_json::from_str(&s).unwrap(),
+        _ => return error("json_load: expected string"),
+    };
+
+    json_visiter(v)
+}
+
+fn json_dumper_visiter(a: MalVal) -> Value {
+    match a {
+        Str(s) => Value::String(s.to_string()),
+        Sym(s) => Value::String(s.to_string()),
+        Hash(hm, _) => {
+            let mut obj = Map::new();
+            for (k,v) in (*hm).clone() {
+                obj.insert(k, json_dumper_visiter(v));
+            }
+            Value::Object(obj)
+        },
+        Bool(b) => Value::Bool(b),
+        Float(f) => Value::Number(Number::from_f64(f).unwrap()),
+        Int(i) => Value::Number(Number::from_f64(i as f64).unwrap()),
+        List(vs, _) => {
+            let mut vector : Vec<Value> = Vec::new();
+            for v in (*vs).clone() {
+                vector.push(json_dumper_visiter(v));
+            }
+            Value::Array(vector)
+        },
+        _ => Value::Null,
+    }
+}
+
+fn json_dump(a: MalArgs) -> MalRet {
+    let j = json_dumper_visiter(a[0].clone());
+    Ok(Str(j.to_string()))
+}
+
 pub fn ns() -> Vec<(&'static str, &'static str, MalVal)> {
     vec![
         ("", "throw", func(|a| Err(ErrMalVal(a[0].clone())))),
@@ -768,12 +901,18 @@ pub fn ns() -> Vec<(&'static str, &'static str, MalVal)> {
             }),
         ),
         ("", "read-string", func(fn_str!(|s| { read_str(s) }))),
-        ("", "slurp", func(fn_str!(|s| { slurp(s) }))),
+        ("os", "read", func(fn_str!(|s| { slurp(s) }))),
+        ("os", "write", func(mal_write)),
+        ("os", "ls", func(mal_os_list_dir)),
         ("", "atom", func(|a| {Ok(atom(&a[0]))})),
         ("", "atom?", func(fn_is_type!(Atom(_)))),
         ("", "deref", func(|a| a[0].deref())),
         ("", "reset!", func(|a| a[0].reset_bang(&a[1]))),
         ("", "swap!", func(|a| a[0].swap_bang(&a[1..].to_vec()))),
+        ("", "gen-init", func(generator_init)),
+        ("", "list", func(list)),
+        ("", "peek", func(peek)),
+        ("", "gen", func(eval_gen)),
         ("", "car", func(car)),
         ("", "cdr", func(cdr)),
         ("", "cons", func(cons)),
@@ -789,6 +928,7 @@ pub fn ns() -> Vec<(&'static str, &'static str, MalVal)> {
         ("", "filter", func(filter)),
         ("", "reduce", func(reduce)),
         ("", "fold", func(fold)),
+        ("", "range", func(range)),
         ("", "nil?", func(fn_is_type!(Nil))),
         ("", "true?", func(fn_is_type!(Bool(true)))),
         ("", "false?", func(fn_is_type!(Bool(false)))),
@@ -808,7 +948,7 @@ pub fn ns() -> Vec<(&'static str, &'static str, MalVal)> {
         ("", "get", func(get)),
         ("", "contains?", func(contains_q)),
         ("", "keys", func(keys)),
-        ("", "vals", func(vals)),
+        ("", "values", func(vals)),
         ("", "type", func(type_info)),
         ("", "time-ms", func(time_ms)),
         ("", "meta", func(|a| a[0].get_meta())),
@@ -827,7 +967,7 @@ pub fn ns() -> Vec<(&'static str, &'static str, MalVal)> {
         ("math", "sum", func(sum)),
         ("math", "mul", func(mul)),
         ("string", "split", func(split)),
-        ("string", "format", func(format)),
+        ("string", "format", func(mal_format)),
         ("string", "join", func(join)),
         ("string", "replace", func(replace)),
         ("string", "cat", func(cat)),
@@ -837,6 +977,8 @@ pub fn ns() -> Vec<(&'static str, &'static str, MalVal)> {
         ("mkdown", "markdown", func(mal_markdown)),
         ("mkdown", "front_matter", func(mal_front_matter)),
         ("list", "dedup", func(dedup)),
+        ("json", "load", func(json_load)),
+        ("json", "dump", func(json_dump)),
     ]
 }
 

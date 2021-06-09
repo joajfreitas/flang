@@ -1,3 +1,5 @@
+use clap::{AppSettings, Clap};
+
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
@@ -12,7 +14,37 @@ use mal::types::format_error;
 use mal::env::env_sets;
 use mal::types::MalVal::{List, Str, Nil};
 
-fn main() {
+/// This doc string acts as a help message when the user runs '--help'
+/// as do all doc strings on fields
+#[derive(Clap)]
+#[clap(version = "0.1", author = "João Freitas. <joaj.freitas@gmail.com>")]
+#[clap(setting = AppSettings::ColoredHelp)]
+struct Opts {
+    #[clap(subcommand)]
+    subcmd: SubCommand,
+}
+
+#[derive(Clap)]
+enum SubCommand {
+    #[clap(version = "0.1", author = "João Freitas <joaj.freitas@gmail.com")]
+    File(File),
+    Repl(Repl),
+}
+
+/// Repl
+#[derive(Clap, Debug)]
+struct Repl {
+}
+
+/// Run file
+#[derive(Clap, Debug)]
+struct File {
+    /// Input file,
+    source: String,
+}
+
+
+fn repl(_args: Repl) -> Result<(), std::io::Error> {
     let repl_env = env_core();
 
     let args = std::env::args();
@@ -57,5 +89,23 @@ fn main() {
                 break
             }
         }
+    }
+
+    Ok(())
+}
+
+fn file(args: File) -> Result<(), std::io::Error> {
+    let repl_env = env_core();
+    let _ = rep(format!("(eval (read-string (slurp \"{}\")))", args.source), &repl_env);
+    Ok(())
+}
+
+fn main() -> Result<(), std::io::Error> {
+
+    let opts: Opts = Opts::parse();
+
+    match opts.subcmd {
+        SubCommand::Repl(args) => {repl(args)},
+        SubCommand::File(args) => {file(args)},
     }
 }

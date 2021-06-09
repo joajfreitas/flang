@@ -1,12 +1,11 @@
 use std::sync::Arc;
 use std::sync::RwLock;
-use std::ops::{Add, BitAnd, BitOr, BitXor, Not};
+use std::ops::{Add, Mul, BitAnd, BitOr, BitXor, Not};
 use itertools::Itertools;
 
 use fnv::FnvHashMap;
-use num_bigint::{BigInt, Sign};
 
-use crate::types::MalVal::{Atom, Bool, Func, Int, List, MalFunc, Nil, Str, Sym, Hash};
+use crate::types::MalVal::{Atom, Bool, Func, Int, Float, List, MalFunc, Nil, Str, Sym, Hash, Generator};
 use crate::types::MalErr::{ErrString};
 use crate::env::{Env, env_bind};
 
@@ -14,7 +13,8 @@ use crate::env::{Env, env_bind};
 pub enum MalVal {
     Nil,
     Bool(bool),
-    Int(BigInt),
+    Int(i64),
+    Float(f64),
     Str(String),
     Sym(String),
     List(Arc<Vec<MalVal>>, Arc<MalVal>),
@@ -31,6 +31,7 @@ pub enum MalVal {
         doc: Arc<MalVal>,
     },
     Atom(Arc<RwLock<MalVal>>),
+    Generator(Arc<MalVal>, Arc<MalVal>)
 }
 
 #[derive(Debug)]
@@ -63,18 +64,6 @@ pub fn func_doc(f: fn(MalArgs) -> MalRet, doc: &str) -> MalVal {
 
 pub fn atom(mv: &MalVal) -> MalVal{
     Atom(Arc::new(RwLock::new(mv.clone())))
-}
-
-pub fn int_to_bigint(i: i64) -> BigInt {
-    if i > 0 {
-        BigInt::new(Sign::Plus, vec![i as u32])
-    }
-    else if i < 0 {
-        BigInt::new(Sign::Minus, vec![(-i) as u32])
-    }
-    else {
-        BigInt::new(Sign::NoSign, vec![])
-    }
 }
 
 impl MalVal {
@@ -122,8 +111,8 @@ impl MalVal {
 
     pub fn count(&self) -> MalRet {
         match self {
-            List(ls,  _) => Ok(Int(BigInt::new(Sign::Plus, vec![ls.len() as u32]))),
-            Nil => Ok(Int(BigInt::new(Sign::NoSign, vec![0]))),
+            List(ls,  _) => Ok(Int(ls.len() as i64)),
+            Nil => Ok(Int(0)),
             _ => error("invalid type for count"),
         }
     }
@@ -185,6 +174,7 @@ impl MalVal {
             Nil => "nil".to_string(),
             Bool(_) => "bool".to_string(),
             Int(_) => "int".to_string(),
+            Float(_) => "float".to_string(),
             Str(_) => "str".to_string(),
             Sym(_) => "sym".to_string(),
             List(_,_) => "list".to_string(),
@@ -192,6 +182,7 @@ impl MalVal {
             Func(_,_,_) => "func".to_string(),
             MalFunc {..} => "mal_func".to_string(),
             Atom(_) => "atom".to_string(),
+            Generator(_, _) => "generator".to_string(),
         }
     }
 
@@ -206,7 +197,7 @@ impl MalVal {
         }
     }
 
-    pub fn to_int(&self) -> BigInt {
+    pub fn to_int(&self) -> i64 {
         match self {
             Int(i) => i.clone(),
             _ => panic!(),
@@ -278,7 +269,13 @@ pub trait Mal {
 
 impl Mal for i32 {
     fn to_mal(&self) -> MalVal {
-        Int(int_to_bigint(self.clone() as i64))
+        Int(*self as i64)
+    }
+}
+
+impl Mal for i64 {
+    fn to_mal(&self) -> MalVal {
+        Int(*self)
     }
 }
 
@@ -287,6 +284,22 @@ impl Add for MalVal {
     fn add(self, other: Self) -> Self {
         match (self, other) {
             (Int(i1), Int(i2)) => Int(i1+i2),
+            (Float(i1), Float(i2)) => Float(i1+i2),
+            (Int(i1), Float(i2)) => Float((i1 as f64)+i2),
+            (Float(i1), Int(i2)) => Float(i1+(i2 as f64)),
+            _ => Nil,
+        }
+    }
+}
+
+impl Mul for MalVal {
+    type Output = Self;
+    fn mul(self, other: Self) -> Self {
+        match (self, other) {
+            (Int(i1), Int(i2)) => Int(i1*i2),
+            (Float(i1), Float(i2)) => Float(i1*i2),
+            (Int(i1), Float(i2)) => Float((i1 as f64)*i2),
+            (Float(i1), Int(i2)) => Float(i1*(i2 as f64)),
             _ => Nil,
         }
     }
