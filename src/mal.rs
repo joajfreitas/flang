@@ -134,6 +134,20 @@ fn eval(mut ast: MalVal, mut env: Env) -> MalRet {
                 }
 
                 match &l[0] {
+                    Sym(ref a0) if a0 == "loop" => {
+                        let mut r;
+                        let mut last = Nil;
+                        loop {
+                            let res = eval(l[1].clone(), env.clone());
+                            r = res.unwrap();
+                            if r.keyword_q() && r.to_string() == "\u{29e}exit" {
+                                break;
+                            }
+                            last = r;
+                        }
+                        println!("last: {:?}", last);
+                        Ok(last)
+                    },
                     Sym(ref a0) if a0 == "def!" => {
                         env_set(&env, l[1].clone(), eval(l[2].clone(), env.clone())?)
                     }
@@ -222,9 +236,8 @@ fn eval(mut ast: MalVal, mut env: Env) -> MalRet {
                     },
                     Sym(ref a0) if a0 == "do" => {
                         match eval_ast(&list!(l[1..].to_vec()), &env)? {
-                            List(_, _) => {
-                                ast = l.last().unwrap_or(&Nil).clone();
-                                continue 'tco;
+                            List(r, _) => {
+                                Ok(r.last().unwrap_or(&Nil).clone())
                             }
                             _ => error("invalid do form"),
                         }

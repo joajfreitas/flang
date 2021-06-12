@@ -141,10 +141,10 @@ fn read_atom(reader: &mut Reader) -> MalRet {
         _ => {
             if int_re.is_match(&token) {
                 Ok(Int(token.parse().unwrap()))
-            } else if float_re.is_match(&token) {
-                Ok(Float(token.parse().unwrap()))
             } else if str_re.is_match(&token) {
                 Ok(Str(unescape_str(&token[1..token.len() - 1])))
+            } else if float_re.is_match(&token) {
+                Ok(Float(token.parse().unwrap()))
             } else if token.starts_with("\"") {
                 error("expected '\"', got EOF")
             } else if token.starts_with(":") {

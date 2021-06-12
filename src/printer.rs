@@ -1,5 +1,5 @@
 use crate::types::MalVal;
-use crate::types::MalVal::{Atom, Bool, Func, Int, Float, List, MalFunc, Nil, Str, Sym, Hash, Generator};
+use crate::types::MalVal::{Atom, Bool, Func, Int, Float, List, MalFunc, Nil, Str, Sym, Hash, Generator, Extra};
 
 
 fn escape_str(s: &str) -> String {
@@ -46,6 +46,7 @@ impl MalVal {
             MalFunc {..} => "mal function".to_string(),
             Atom(a) => format!("(atom {})", a.read().unwrap().pr_str(print_readably)),
             Generator(_, _) => "generator".to_string(),
+            Extra(extra) => extra.to_string(),
         }
     }
 

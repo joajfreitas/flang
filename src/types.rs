@@ -4,10 +4,22 @@ use std::ops::{Add, Mul, BitAnd, BitOr, BitXor, Not};
 use itertools::Itertools;
 
 use fnv::FnvHashMap;
+use std::net::UdpSocket;
+use std::net::TcpStream;
+use std::net::TcpListener;
+use std::thread::JoinHandle;
 
-use crate::types::MalVal::{Atom, Bool, Func, Int, Float, List, MalFunc, Nil, Str, Sym, Hash, Generator};
+use crate::types::MalVal::{Atom, Bool, Func, Int, Float, List, MalFunc, Nil, Str, Sym, Hash, Generator, Extra};
 use crate::types::MalErr::{ErrString};
 use crate::env::{Env, env_bind};
+
+#[derive(Debug, Clone)]
+pub enum Extras {
+    UdpSocket(Arc<UdpSocket>),
+    Thread(Arc<JoinHandle<()>>),
+    TcpStream(Arc<TcpStream>),
+    TcpListener(Arc<TcpListener>),
+}
 
 #[derive(Debug, Clone)]
 pub enum MalVal {
@@ -18,7 +30,6 @@ pub enum MalVal {
     Str(String),
     Sym(String),
     List(Arc<Vec<MalVal>>, Arc<MalVal>),
-    //Vector(Arc<Vec<MalVal>>, Arc<MalVal>),
     Hash(Arc<FnvHashMap<String, MalVal>>, Arc<MalVal>),
     Func(fn(MalArgs) -> MalRet, Arc<MalVal>, Arc<MalVal>),
     MalFunc {
@@ -31,7 +42,8 @@ pub enum MalVal {
         doc: Arc<MalVal>,
     },
     Atom(Arc<RwLock<MalVal>>),
-    Generator(Arc<MalVal>, Arc<MalVal>)
+    Generator(Arc<MalVal>, Arc<MalVal>),
+    Extra(Extras)
 }
 
 #[derive(Debug)]
@@ -183,6 +195,7 @@ impl MalVal {
             MalFunc {..} => "mal_func".to_string(),
             Atom(_) => "atom".to_string(),
             Generator(_, _) => "generator".to_string(),
+            Extra(_) => "extra".to_string(),
         }
     }
 
@@ -190,24 +203,47 @@ impl MalVal {
         match self {
             Str(s) => s.to_string(),
             Sym(s) => s.to_string(),
-            _ => {
+             _=> {
                 println!("type: {}", self.type_info());
-                panic!();
+                //panic!();
+                "failed".to_string()
             }
         }
     }
 
-    pub fn to_int(&self) -> i64 {
-        match self {
-            Int(i) => i.clone(),
-            _ => panic!(),
-        }
-    }
 
     pub fn error_nil(&self, s: &str) -> MalRet {
         match self {
             Nil => Err(ErrString(s.to_string())),
             _ => Ok(self.clone()),
+        }
+    }
+
+    pub fn int(&self, s: &str) -> Result<i64, MalErr> {
+        match self {
+            Int(i) => Ok(*i),
+            _ => Err(ErrString(s.to_string())),
+        }
+    }
+
+    pub fn extra(&self, s: &str) -> Result<Extras, MalErr>{
+        match self {
+            Extra(ex) => Ok(ex.clone()),
+            _ => Err(ErrString(s.to_string())),
+        }
+    }
+
+    pub fn str(&self, s: &str) -> Result<String, MalErr> {
+        match self {
+            Str(st) => Ok(st.to_string()),
+            _ => Err(ErrString(s.to_string())),
+        }
+    }
+    
+    pub fn is_malfunc(&self) -> bool {
+        match self {
+            MalFunc {..} => true,
+            _ => false,
         }
     }
 }
@@ -279,6 +315,12 @@ impl Mal for i64 {
     }
 }
 
+impl Mal for u8 {
+    fn to_mal(&self) -> MalVal {
+        Int(*self as i64)
+    }
+}
+
 impl Add for MalVal {
     type Output = Self;
     fn add(self, other: Self) -> Self {
@@ -346,6 +388,19 @@ impl BitXor for MalVal {
         match (self, rhs) {
             (Bool(b1), Bool(b2)) => Bool(b1 ^ b2),
             _ => Nil,
+        }
+    }
+}
+
+impl Extras {
+    pub fn to_string(&self) -> String {
+        "extras".to_string()
+    }
+
+    pub fn udp_socket(&self, s: &str) -> Result<Arc<UdpSocket>, MalErr> {
+        match self {
+            Extras::UdpSocket(s) => Ok(s.clone()),
+            _ => return Err(ErrString(s.to_string())),
         }
     }
 }

@@ -7,10 +7,17 @@ use fnv::FnvHashMap;
 use serde_json::{self, Value, Number};
 use serde_json::map::Map;
 
+use std::thread;
+use std::time;
 use std::fs::File;
 use std::io::Read;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
+use std::net::UdpSocket;
+use std::net::TcpStream;
+use std::net::TcpListener;
+use std::os::unix::io::AsRawFd;
+use std::os::unix::io::FromRawFd;
 
 use itertools::Itertools;
 
@@ -41,9 +48,10 @@ use crate::types::MalVal::{
     Func, 
     MalFunc,
     Generator,
+    Extra,
 };
 
-use crate::types::{error, func, func_doc};
+use crate::types::{error, func, func_doc, Extras};
 use crate::types::MalErr::{ErrMalVal, ErrString};
 use crate::mal::rep;
 
@@ -850,6 +858,120 @@ fn json_dump(a: MalArgs) -> MalRet {
     Ok(Str(j.to_string()))
 }
 
+fn mal_socket_udp(a: MalArgs) -> MalRet {
+    let socket = match &a[0] {
+        Str(s) => UdpSocket::bind(s),
+        _ => return error(&format!("udp: expected (string) got {}", a[0].type_info())),
+    };
+
+    let socket = match socket {
+        Ok(s) => s,
+        Err(err) => return error(&format!("udp: socket error {:?}", err)),
+    };
+
+
+    Ok(MalVal::Extra(Extras::UdpSocket(Arc::new(socket))))
+}
+
+fn mal_socket_udp_recv(a: MalArgs) -> MalRet {
+    let socket = a[0]
+        .extra(&format!("socket::udp-recv: expected (extra), got ({})", a[0].type_info()))?
+        .udp_socket(&format!("socket::udp-recv: expected (udp-sokcet, got ({})", "something"))?;
+
+        
+    let mut n_bytes = 0;
+    let mut buf = [0; 1024];
+    match socket.recv(&mut buf) {
+        Err(err) => println!("udp_recv: {}", err),
+        Ok(n) => n_bytes = n,
+    };
+    
+    Ok(list!(buf[..n_bytes]
+            .iter()
+            .cloned()
+            .map(|x| x.to_mal())
+            .collect()))
+}
+
+fn mal_socket_udp_send(a: MalArgs) -> MalRet {
+    let socket = a[0]
+        .extra(&format!("socket::udp-recv: expected (extra), got ({})", a[0].type_info()))?
+        .udp_socket(&format!("socket::udp-recv: expected (udp-sokcet, got ({})", "something"))?;
+   
+    let (address, buffer) = match (&a[1], &a[2]) {
+        (Str(add), Str(buffer)) => (add.to_string(), buffer.to_string()),
+        _ => return error(&format!("socket::udp-send: expected (list) got {}", a[1].type_info())),
+    };
+
+    socket.send_to(&buffer.as_bytes().to_vec(), address);
+    Ok(Nil)
+}
+
+fn mal_to_ascii(a: MalArgs) -> MalRet {
+    match &a[0] {
+        Int(i) => Ok(Str(((*i as u8) as char).to_string())),
+        _ => error(&format!("to-ascii: expect (int) got ({})", a[0].type_info()))
+    }
+}
+
+fn mal_exit(_a: MalArgs) -> MalRet {
+    std::process::exit(0);
+}
+
+fn mal_thread_create(a: MalArgs) -> MalRet {
+    let mut args = list_args(a.clone())?;
+
+    if !args[0].is_malfunc() {
+        return error(&format!("thread::create: expected (function) got ({})", a[0].type_info()));
+    }
+
+    let f = args[0].clone();
+    
+    args.remove(0);
+    let child = thread::spawn(move || {
+        f.apply(args).unwrap();
+    });
+
+    Ok(MalVal::Extra(Extras::Thread(Arc::new(child))))
+}
+
+fn mal_thread_sleep(a: MalArgs) -> MalRet {
+    let time = a[0].int(&format!("thead::sleep expected (int) got ({})", a[0].type_info()))?;
+    thread::sleep(time::Duration::from_millis(time as u64));
+    Ok(Nil)
+}
+
+fn mal_socket_tcp_connect(a: MalArgs) -> MalRet {
+    let mut stream = TcpStream::connect(a[0].str(&format!("tcp-connect: expected (str), got {}", a[0].type_info()))?);
+
+    let stream = match stream {
+        Ok(o) => o,
+        Err(err) => return Err(ErrString(format!("tcp-connect: {:?}", err))),
+    };
+
+    Ok(MalVal::Extra(Extras::TcpStream(Arc::new(stream))))
+}
+
+fn mal_socket_tcp_bind(a: MalArgs) -> MalRet {
+    let listener = TcpListener::bind(a[0].str(&format!("tcp-bind: expected (str), got {}", a[0].type_info()))?);
+
+    let listener = match listener {
+        Ok(o) => o,
+        Err(err) => return Err(ErrString(format!("tcp-bind: {:?}", err))),
+    };
+
+    Ok(MalVal::Extra(Extras::TcpListener(Arc::new(listener))))
+}
+
+fn mal_socket_tcp_recv(a: MalArgs) -> MalRet {
+    Ok(Nil)
+}
+
+fn mal_socket_tcp_send(a: MalArgs) -> MalRet {
+    Ok(Nil)
+}
+
+
 pub fn ns() -> Vec<(&'static str, &'static str, MalVal)> {
     vec![
         ("", "throw", func(|a| Err(ErrMalVal(a[0].clone())))),
@@ -901,9 +1023,6 @@ pub fn ns() -> Vec<(&'static str, &'static str, MalVal)> {
             }),
         ),
         ("", "read-string", func(fn_str!(|s| { read_str(s) }))),
-        ("os", "read", func(fn_str!(|s| { slurp(s) }))),
-        ("os", "write", func(mal_write)),
-        ("os", "ls", func(mal_os_list_dir)),
         ("", "atom", func(|a| {Ok(atom(&a[0]))})),
         ("", "atom?", func(fn_is_type!(Atom(_)))),
         ("", "deref", func(|a| a[0].deref())),
@@ -979,6 +1098,20 @@ pub fn ns() -> Vec<(&'static str, &'static str, MalVal)> {
         ("list", "dedup", func(dedup)),
         ("json", "load", func(json_load)),
         ("json", "dump", func(json_dump)),
+        ("os", "read", func(fn_str!(|s| { slurp(s) }))),
+        ("os", "write", func(mal_write)),
+        ("os", "ls", func(mal_os_list_dir)),
+        ("socket", "udp", func(mal_socket_udp)),
+        ("socket", "udp-recv", func(mal_socket_udp_recv)),
+        ("socket", "udp-send", func(mal_socket_udp_send)),
+        ("thread", "create", func(mal_thread_create)),
+        ("thread", "sleep_ms", func(mal_thread_sleep)),
+        ("socket", "tcp-connect", func(mal_socket_tcp_connect)),
+        ("socket", "tcp-bind", func(mal_socket_tcp_bind)),
+        ("socket", "tcp-recv", func(mal_socket_tcp_recv)),
+        ("socket", "tcp-send", func(mal_socket_tcp_send)),
+        ("", "to-ascii", func(mal_to_ascii)),
+        ("", "exit", func(mal_exit)),
     ]
 }
 
