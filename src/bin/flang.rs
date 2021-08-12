@@ -4,6 +4,8 @@ use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
 use std::sync::Arc;
+use std::env::Args;
+use std::fs;
 
 use colored::*;
 
@@ -11,7 +13,7 @@ use mal::mal::rep;
 use mal::list;
 use mal::core::env_core;
 use mal::types::format_error;
-use mal::env::env_sets;
+use mal::env::{env_sets, Env};
 use mal::types::MalVal::{List, Str, Nil};
 
 /// This doc string acts as a help message when the user runs '--help'
@@ -43,24 +45,45 @@ struct File {
     source: String,
 }
 
+fn prelude(repl_env: &Env, args: Args) {
+    env_sets(&repl_env, "", "*ARGV*", list!(args.map(Str).collect()));
+
+    let _ = rep(
+        "(def! load-file (fn* (f) (eval (read-string (str \"(do \" (slurp f)\"\nnil)\")))))".to_string(), &repl_env,);
+
+let _ = rep("\
+(defmacro! cond \
+	(fn* (& xs) \
+		(if (nil? xs) \
+			(throw \"unexpected end of input\")\
+			(if (= (car (car xs)) 'else)\
+				(car (cdr (car xs)))\
+				(list \
+					'if (car (car xs)) \
+						(if (not (nil? (cdr (car xs))))\
+							(car (cdr (car xs)))\
+							(throw \"odd number of forms to cond\")\
+						) \
+						(cons 'cond (cdr xs))\
+				)\
+			)\
+		)\
+	)\
+)\
+".to_string(), &repl_env);
+
+    let _ = rep("(def! *host-language* \"flang\")".to_string(), &repl_env);
+
+}
+
 
 fn repl(_args: Repl) -> Result<(), std::io::Error> {
     let repl_env = env_core();
 
     let args = std::env::args();
-    env_sets(&repl_env, "", "*ARGV*", list!(args.map(Str).collect()));
-    
-    //let _ = rep("", &repl_env);
+    prelude(&repl_env, args);
 
-    let _ = rep(
-        "(def! load-file (fn* (f) (eval (read-string (str \"(do \" (slurp f)\"\nnil)\")))))".to_string(), &repl_env,);
-
-    let _ = rep("(defmacro! cond (fn* (& xs) (if (> (count xs) 0) (list 'if (first xs) (if (> (count xs) 1) (nth xs 1) (throw \"odd number of forms to cond\")) (cons 'cond (rest (rest xs)))))))".to_string(), &repl_env);
-
-    let _ = rep("(def! *host-language* \"flang\")".to_string(), &repl_env);
     let _ = rep("(println (str \"Mal [\" *host-language* \"]\"))".to_string(), &repl_env);
-
-    println!("{:?}", rep("(eval (read-string (os::read \"prelude.mal\")))".to_string(), &repl_env));
 
     let mut rl = Editor::<()>::new();
     if rl.load_history(".flang-history").is_err() {
@@ -100,7 +123,10 @@ fn repl(_args: Repl) -> Result<(), std::io::Error> {
 
 fn file(args: File) -> Result<(), std::io::Error> {
     let repl_env = env_core();
-    let _ = rep(format!("(eval (read-string (slurp \"{}\")))", args.source), &repl_env);
+    prelude(&repl_env, std::env::args());
+
+    let file = fs::read_to_string(args.source)?;
+    println!("{:?}", rep(file, &repl_env));
     Ok(())
 }
 

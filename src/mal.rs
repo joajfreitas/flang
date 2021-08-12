@@ -122,7 +122,7 @@ fn eval(mut ast: MalVal, mut env: Env) -> MalRet {
         ret = match ast.clone() {
             List(l, _) => {
                 if l.len() == 0 {
-                    return Ok(ast);
+                    return Ok(Nil);
                 }
                 match macroexpand(ast.clone(), &env) {
                     (true, Ok(new_ast)) => {
@@ -150,6 +150,25 @@ fn eval(mut ast: MalVal, mut env: Env) -> MalRet {
                     },
                     Sym(ref a0) if a0 == "def!" => {
                         env_set(&env, l[1].clone(), eval(l[2].clone(), env.clone())?)
+                    },
+                    Sym(ref a0) if a0 == "define" => {
+                        match &l[1] {
+                            List(args, _) => {
+                                let mut nargs = (**args).clone();
+                                let name = nargs[0].clone();
+                                nargs.remove(0);
+
+                                let mut l = (*l).clone();
+                                l.remove(0);
+                                l.remove(0);
+                                l.insert(0, MalVal::Sym("fn*".to_string()));
+                                l.insert(1, list![nargs]);
+
+                                let function = eval(list![l], env.clone())?;
+                                env_set(&env, name, function)
+                            },
+                            _ => error("non-implemented mit-scheme form"),
+                        }
                     }
                     Sym(ref a0) if a0 == "defmacro!" => {
                         match eval(l[2].clone(), env.clone())? {
@@ -261,9 +280,14 @@ fn eval(mut ast: MalVal, mut env: Env) -> MalRet {
                     },
                     Sym(ref a0) if a0 == "fn*" => {
                         let (a1, a2) = (l[1].clone(), l[2].clone());
+                        let mut l = (*l).clone();
+                        l.remove(0);
+                        l.remove(0);
+                        l.insert(0, MalVal::Sym("do".to_string()));
+
                         Ok(MalFunc {
                             eval: eval,
-                            ast: Arc::new(a2),
+                            ast: Arc::new(list!(l)),
                             env: env.clone(),
                             params: Arc::new(a1),
                             is_macro: false,

@@ -703,10 +703,14 @@ fn mal_sum(a: MalArgs) -> MalRet {
 }
 
 fn mal_diff(a: MalArgs) -> MalRet {
-    match (a[0].clone(), a[1].clone()) {
-        (Int(i1), Int(i2)) => Ok(Int(i1 - i2)),
-        _ => error(&format!("+: unexpected arguments, expected (int, int) got ({}, {})", a[0].type_info(), a[1].type_info())),
+    if a.len() == 1 {
+        return match a[0] {
+            Int(i) => Ok(Int(-i)),
+            Float(f) => Ok(Float(-f)),
+            _ => error(&format!("-: expect (float|int) got {}", a[0].type_info())),
+        };
     }
+    Ok(a[0].clone() - a[1].clone())
 }
 
 fn mal_product(a: MalArgs) -> MalRet {
@@ -714,17 +718,15 @@ fn mal_product(a: MalArgs) -> MalRet {
 }
 
 fn mal_div(a: MalArgs) -> MalRet {
-    match (a[0].clone(), a[1].clone()) {
-        (Int(i1), Int(i2)) => {
-            Ok(Int(i1/i2))
-        }
-        _ => error(&format!("/: expected (int, int) got ({}, {})", a[0].type_info(), a[1].type_info()))
-    }
+    Ok(a[0].clone() / a[1].clone())
 }
 
 fn mal_bt(a: MalArgs) -> MalRet {
     match (a[0].clone(), a[1].clone()) {
         (Int(i1), Int(i2)) => Ok(Bool(i1 > i2)),
+        (Float(i1), Int(i2)) => Ok(Bool(i1 > (i2 as f64))),
+        (Int(i1), Float(i2)) => Ok(Bool((i1 as f64) > i2)),
+        (Float(i1), Float(i2)) => Ok(Bool(i1 > i2)),
         _ => error(&format!(">: expected (int, int) got ({}, {})", a[0].type_info(), a[1].type_info()))
     }
 }
@@ -732,6 +734,9 @@ fn mal_bt(a: MalArgs) -> MalRet {
 fn mal_lt(a: MalArgs) -> MalRet {
     match (a[0].clone(), a[1].clone()) {
         (Int(i1), Int(i2)) => Ok(Bool(i1 < i2)),
+        (Float(i1), Int(i2)) => Ok(Bool(i1 < (i2 as f64))),
+        (Int(i1), Float(i2)) => Ok(Bool((i1 as f64) < i2)),
+        (Float(i1), Float(i2)) => Ok(Bool(i1 < i2)),
         _ => error(&format!("<: expected (int, int) got ({}, {})", a[0].type_info(), a[1].type_info()))
     }
 }
@@ -1029,7 +1034,7 @@ pub fn ns() -> Vec<(&'static str, &'static str, MalVal)> {
         ("", "reset!", func(|a| a[0].reset_bang(&a[1]))),
         ("", "swap!", func(|a| a[0].swap_bang(&a[1..].to_vec()))),
         ("", "gen-init", func(generator_init)),
-        ("", "list", func(list)),
+        ("", "list", func_doc(|a| {Ok(list!(a))}, "Make list.")),
         ("", "peek", func(peek)),
         ("", "gen", func(eval_gen)),
         ("", "car", func(car)),

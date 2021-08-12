@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use std::sync::RwLock;
-use std::ops::{Add, Mul, BitAnd, BitOr, BitXor, Not};
+use std::ops::{Add, Sub, Mul, Div, BitAnd, BitOr, BitXor, Not};
 use itertools::Itertools;
 
 use fnv::FnvHashMap;
@@ -334,6 +334,19 @@ impl Add for MalVal {
     }
 }
 
+impl Sub for MalVal {
+    type Output = Self;
+    fn sub(self, other: Self) -> Self {
+        match (self, other) {
+            (Int(i1), Int(i2)) => Int(i1-i2),
+            (Float(i1), Float(i2)) => Float(i1-i2),
+            (Int(i1), Float(i2)) => Float((i1 as f64)-i2),
+            (Float(i1), Int(i2)) => Float(i1-(i2 as f64)),
+            _ => Nil,
+        }
+    }
+}
+
 impl Mul for MalVal {
     type Output = Self;
     fn mul(self, other: Self) -> Self {
@@ -342,6 +355,19 @@ impl Mul for MalVal {
             (Float(i1), Float(i2)) => Float(i1*i2),
             (Int(i1), Float(i2)) => Float((i1 as f64)*i2),
             (Float(i1), Int(i2)) => Float(i1*(i2 as f64)),
+            _ => Nil,
+        }
+    }
+}
+
+impl Div for MalVal {
+    type Output = Self;
+    fn div(self, other: Self) -> Self {
+        match (self, other) {
+            (Int(i1), Int(i2)) => Int(i1/i2),
+            (Float(i1), Float(i2)) => Float(i1/i2),
+            (Int(i1), Float(i2)) => Float((i1 as f64)/i2),
+            (Float(i1), Int(i2)) => Float(i1/(i2 as f64)),
             _ => Nil,
         }
     }
