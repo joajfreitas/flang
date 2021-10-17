@@ -9,12 +9,12 @@ use std::fs;
 
 use colored::*;
 
-use mal::mal::rep;
-use mal::list;
-use mal::core::env_core;
-use mal::types::format_error;
-use mal::env::{env_sets, Env};
-use mal::types::MalVal::{List, Str, Nil};
+use flang::mal::rep;
+use flang::list;
+use flang::core::env_core;
+use flang::types::format_error;
+use flang::env::{env_sets, Env};
+use flang::types::MalVal::{List, Str, Nil};
 
 /// This doc string acts as a help message when the user runs '--help'
 /// as do all doc strings on fields

@@ -1,9 +1,13 @@
+use log::{info, error};
 use std::sync::Arc;
 use std::sync::RwLock;
 
+//use colored::*;
+
 use fnv::FnvHashMap;
 
-use crate::types::MalVal::{List, Nil, Sym};
+//use crate::types::MalErr::ErrString;
+use crate::types::MalVal::{List, Nil, Sym, Vector};
 use crate::types::{error, MalVal, MalRet, MalArgs, MalErr};
 use crate::types::MalErr::{ErrString};
 
@@ -30,11 +34,8 @@ pub fn env_bind(outer: Option<Env>, mbinds: MalVal, exprs: MalArgs) -> Result<En
 {
     let env = env_new(outer);
     match mbinds {
-        List(binds, _)=> {
+        List(binds, _) | Vector(binds, _) => {
             for (i, b) in binds.iter().enumerate() {
-                if exprs.len() <= i {
-                    return Err(ErrString("env_bind: failed to bind all arguments".to_string()));
-                }
                 match b {
                     Sym(s) if s == "&" => {
                         env_set(&env, binds[i + 1].clone(), list!(exprs[i..].to_vec()))?;
@@ -47,7 +48,7 @@ pub fn env_bind(outer: Option<Env>, mbinds: MalVal, exprs: MalArgs) -> Result<En
             }
             Ok(env)
         }
-        _ => Err(ErrString("env bind binds not List".to_string())),
+        _ => Err(ErrString("env bind binds not List/Vector".to_string())),
     }
 }
 

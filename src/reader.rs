@@ -5,9 +5,11 @@ use regex::{Captures, Regex};
 use std::sync::Arc;
 
 use crate::types::{MalVal, MalRet, MalErr, error};
-use crate::types::MalVal::{Bool, Int, Float, List, Nil, Str, Sym};
+use crate::types::MalVal::{Bool, Int, List, Nil, Str, Sym, Vector};
 use crate::types::MalErr::{ErrString};
 use crate::types::{hash_map};
+
+use num_bigint::{BigInt, Sign};
 
 #[derive(Debug, Clone)]
 struct Reader {
@@ -114,7 +116,7 @@ fn read_seq(reader: &mut Reader, end: &str) -> MalRet {
     let _ = reader.next();
     match end {
         ")" => Ok(list!(seq)),
-        "]" => Ok(list!(seq)),
+        "]" => Ok(vector!(seq)),
         "}" => hash_map(seq),
         _ =>  error("read_seq unknown end value"),
     }
@@ -130,7 +132,6 @@ fn unescape_str(s: &str) -> String {
 
 fn read_atom(reader: &mut Reader) -> MalRet {
     let int_re: Regex = Regex::new(r"^-?[0-9]+$").unwrap();
-    let float_re: Regex = Regex::new(r"[+-]?([0-9]*[.])?[0-9]+").unwrap();
     let str_re: Regex = Regex::new(r#""(?:\\.|[^\\"])*""#).unwrap();
 
     let token = reader.next().unwrap();
@@ -140,11 +141,19 @@ fn read_atom(reader: &mut Reader) -> MalRet {
         "true" => Ok(Bool(true)),
         _ => {
             if int_re.is_match(&token) {
-                Ok(Int(token.parse().unwrap()))
+                let i:i32 = token.parse().unwrap();
+                if i > 0 {
+                    Ok(Int(BigInt::new(Sign::Plus, vec![i as u32])))
+                }
+                else if i < 0 {
+                    Ok(Int(BigInt::new(Sign::Minus, vec![(-i) as u32])))
+                }
+                else {
+                    Ok(Int(BigInt::new(Sign::NoSign, vec![0])))
+                }
+                //Ok(Int(i as i64))
             } else if str_re.is_match(&token) {
                 Ok(Str(unescape_str(&token[1..token.len() - 1])))
-            } else if float_re.is_match(&token) {
-                Ok(Float(token.parse().unwrap()))
             } else if token.starts_with("\"") {
                 error("expected '\"', got EOF")
             } else if token.starts_with(":") {

@@ -1,9 +1,12 @@
+//extern crate yaml_rust;
+
 use pulldown_cmark::{Parser, Options, html};
-use regex::Regex;
+use regex::{Regex, Captures};
+//use yaml_rust::{YamlLoader, Yaml};
 use fnv::FnvHashMap;
 
-use crate::mal::{read_eval};
-use crate::env::{env_new, env_set_from_vector};
+use crate::mal::{rep, read_eval};
+use crate::env::{env_new, Env, env_set_from_vector};
 use crate::types::MalVal;
 use crate::types::MalVal::{Sym, Hash};
 use crate::core::ns;
@@ -56,5 +59,3 @@ pub fn markdown(input: String) -> FnvHashMap<String, MalVal> {
 
     return meta;
 }
-
-
