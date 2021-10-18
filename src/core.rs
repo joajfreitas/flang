@@ -70,7 +70,7 @@ fn slurp(f: String) -> MalRet {
     let mut s = String::new();
     match File::open(f.to_string()).and_then(|mut f| f.read_to_string(&mut s)) {
         Ok(_) => Ok(Str(s)),
-        Err(e) => {println!("slurp: {}", e.to_string()); error(&format!("slurp: {}", &e.to_string()))},
+        Err(e) => {println!("slurp: {}", e.to_string()); error(&format!("slurp: {}, {}", &e.to_string(), f))},
     }
 }
 
@@ -239,6 +239,7 @@ fn type_info(a: MalArgs) -> MalRet {
 fn get(a: MalArgs) -> MalRet {
     match (a[0].clone(), a[1].clone()) {
         (Nil, _) => Ok(Nil),
+        (_, Nil) => Ok(Nil),
         (Hash(ref hm, _), Str(ref s)) => match hm.get(s) {
             Some(mv) => Ok(mv.clone()),
             None => Ok(Nil),
@@ -504,6 +505,17 @@ fn join(a: MalArgs) -> MalRet {
 }
 
 fn mal_in(a: MalArgs) -> MalRet {
+    match (&a[0], &a[1]) {
+        (Nil, _) | (_, Nil) => {return Ok(Bool(false));},
+        (Str(pred), List(list, _))  => {
+            return Ok(Bool(list.contains(&a[0])));
+        },
+        (Sym(pred), List(list, _)) => {
+            return Ok(Bool(list.contains(&a[0])));
+        },
+        _ => {}
+    }
+
     let (pred, string) = match (&a[0], &a[1]) {
         (Str(pred), Str(string)) => (pred, string),
         (Sym(pred), Str(string)) => (pred, string),
@@ -565,20 +577,41 @@ pub fn curl_get(a: MalArgs) -> MalRet {
 }
 
 pub fn dedup(a: MalArgs) -> MalRet {
+    let mut ys : Vec<MalVal> = Vec::new();
+
     match &a[0] {
-        List(v, _) | Vector(v, _) => {
-            let mut x = (**v).clone();
-            x.dedup();
-            Ok(vector![x])
+        List(vs, _) | Vector(vs, _) => {
+            for v in vs.to_vec() {
+                if !ys.contains(&v) {
+                    ys.push(v.clone());
+                }
+            }
+            Ok(vector![ys])
         },
         _ => error("list::dedup received something that is not a sequence"),
     }
 }
 
 pub fn flatten(a: MalArgs) -> MalRet {
+    let mut xs : Vec<MalVal> = Vec::new();
+
     match &a[0] {
-        _ => Ok(a[0].clone())
-    }
+        List(vs, _) | Vector(vs, _) => {
+            for v in vs.to_vec() {
+                match v {
+                    List(us, _) | Vector(us, _) => {
+                        for u in us.to_vec() {
+                            xs.push(u);
+                        }
+                    }
+                    _ => {}
+                };
+            }
+        }
+        _ => {}
+    };
+
+    return Ok(vector![xs]);
 }
 
 pub fn ns() -> Vec<(&'static str, &'static str, MalVal)> {
