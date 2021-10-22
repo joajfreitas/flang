@@ -1,4 +1,4 @@
-use clap::{AppSettings, Clap};
+use clap::{AppSettings, Parser};
 
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
@@ -18,15 +18,14 @@ use flang::types::MalVal::{List, Str, Nil};
 
 /// This doc string acts as a help message when the user runs '--help'
 /// as do all doc strings on fields
-#[derive(Clap)]
+#[derive(Parser)]
 #[clap(version = "0.1", author = "João Freitas. <joaj.freitas@gmail.com>")]
-#[clap(setting = AppSettings::ColoredHelp)]
 struct Opts {
     #[clap(subcommand)]
     subcmd: SubCommand,
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 enum SubCommand {
     #[clap(version = "0.1", author = "João Freitas <joaj.freitas@gmail.com")]
     File(File),
@@ -34,12 +33,12 @@ enum SubCommand {
 }
 
 /// Repl
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 struct Repl {
 }
 
 /// Run file
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 struct File {
     /// Input file,
     source: String,
