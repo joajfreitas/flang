@@ -11,14 +11,14 @@ struct Test {
     result: String,
 }
 
-fn main()
+fn main() -> Result<(), ()>
 {
     let args: Vec<String> = std::env::args().collect();
     let tests = std::fs::read_to_string(args[1].clone())
         .expect("Something went wrong reading the file");
 
     let mut passed: u32 = 0;
-    let tests: Vec<Test> = serde_json::from_str::<Vec<Test>>(&tests)?;
+    let tests: Vec<Test> = serde_json::from_str::<Vec<Test>>(&tests).unwrap();
     for test in &tests {
         let repl_env = env_core();
         match rep(test.input.clone(), &repl_env) {
@@ -42,10 +42,10 @@ fn main()
     println!("{}/{}", passed, tests.len());
 
     if passed == tests.len() as u32 {
-        std::process::exit(exitcode::OK);
+        return Ok(());
     }
     else {
-        std::proess:exit()
+        return Err(());
     }
 }
 

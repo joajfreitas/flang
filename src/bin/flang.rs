@@ -35,6 +35,8 @@ enum SubCommand {
 /// Repl
 #[derive(Parser, Debug)]
 struct Repl {
+    #[clap(short, long)]
+    interactive: Option<String>,
 }
 
 /// Run file
@@ -87,6 +89,12 @@ fn repl(_args: Repl) -> Result<(), std::io::Error> {
     let mut rl = Editor::<()>::new();
     if rl.load_history(".flang-history").is_err() {
         //println!("No previous history.");
+    }
+
+    if _args.interactive.is_some() {
+        _args.interactive.unwrap();
+        println!("interactive");
+        return Ok(());
     }
     
     let mut prompt: String = "user> ".to_string();
