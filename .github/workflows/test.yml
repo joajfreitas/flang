@@ -1,0 +1,8 @@
+name: Base Flang Test
+on: [push]
+jobs:
+  base_flang_test:
+    runs-on: rust
+    steps:
+      - run: cargo run --bin test tests/v0.1.json
+      - run: cargo run --bin test tests/stdlib.json
