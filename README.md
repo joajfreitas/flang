@@ -1,3 +1,5 @@
+[![Tests](https://github.com/joajfreitas/flang/actions/workflows/tests.yml/badge.svg?branch=master)](https://github.com/joajfreitas/flang/actions/workflows/tests.yml)
+
 # flang
 
 flang is a lisp implementation that follows the [mal](https://github.com/kanaka/mal) process but does not strictly aderes to it.
