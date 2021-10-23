@@ -1,0 +1,10 @@
+stages:
+  - test
+
+test-base:
+  image: rust
+  stage: test
+
+  script:
+    cargo run --bin test tests/v0.1.json
+    cargo run --bin test tests/stdlib.json
