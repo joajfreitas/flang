@@ -42,28 +42,6 @@ pub enum MalErr {
 pub type MalArgs = Vec<MalVal>;
 pub type MalRet = Result<MalVal, MalErr>;
 
-/*
-macro_rules! list {
-  ($seq:expr) => {{
-    List(Arc::new($seq),Arc::new(Nil))
-  }};
-  [$($args:expr),*] => {{
-    let v: Vec<MalVal> = vec![$($args),*];
-    List(Arc::new(v),Arc::new(Nil))
-  }}
-}
-
-macro_rules! vector {
-  ($seq:expr) => {{
-    Vector(Arc::new($seq),Arc::new(Nil))
-  }};
-  [$($args:expr),*] => {{
-    let v: Vec<MalVal> = vec![$($args),*];
-    Vector(Arc::new(v),Arc::new(Nil))
-  }}
-}
-*/
-
 pub fn error(s: &str) -> MalRet {
     Err(ErrString(s.to_string()))
 }

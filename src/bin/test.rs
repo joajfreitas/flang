@@ -1,5 +1,7 @@
 extern crate exitcode;
+extern crate colored;
 
+use colored::*;
 use serde::{Serialize, Deserialize};
 
 use flang::mal::rep;
@@ -25,27 +27,29 @@ fn main() -> Result<(), ()>
             Ok(r) => {
                 if r == test.result {
                     passed += 1;
-                    println!(".");
+                    println!("{}", ".".green());
                 }
                 else {
-                    println!("Failed: {} -> {}", test.input, test.result);
+                    println!("Failed: {} -> {}. Got: {}", test.input, test.result, r);
                     continue;
                 }
             },
             Err(err) => {
-                println!("Failed");
+                println!("Failed {:?}", err);
                 continue;
             }
         };
     }
-    println!("------------------------------------------------------------------------------------------------------");
-    println!("{}/{}", passed, tests.len());
+
+    println!("{}", std::iter::repeat("-").take(80).collect::<String>());
+    let blank = std::iter::repeat(" ").take(77).collect::<String>();
+    println!("{}{}/{}", blank, passed, tests.len());
 
     if passed == tests.len() as u32 {
-        return Ok(());
+        Ok(())
     }
     else {
-        return Err(());
+        Err(())
     }
 }
 

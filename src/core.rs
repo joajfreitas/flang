@@ -432,7 +432,7 @@ fn render(a: MalArgs) -> MalRet {
         |cap: &regex::Captures| {
             let r = match rep(cap[1].to_string(), &env) {
                 Ok(ok) => ok,
-                Err(err) => format!("{:?}", cap[1].to_string()),
+                Err(_err) => format!("{:?}", cap[1].to_string()),
             };
             //MalErr::ErrString(format!("{}", r))
             r
@@ -507,10 +507,7 @@ fn join(a: MalArgs) -> MalRet {
 fn mal_in(a: MalArgs) -> MalRet {
     match (&a[0], &a[1]) {
         (Nil, _) | (_, Nil) => {return Ok(Bool(false));},
-        (Str(pred), List(list, _))  => {
-            return Ok(Bool(list.contains(&a[0])));
-        },
-        (Sym(pred), List(list, _)) => {
+        (_, List(list, _)) | (_, Vector(list, _)) => {
             return Ok(Bool(list.contains(&a[0])));
         },
         _ => {}
@@ -571,7 +568,7 @@ pub fn curl_get(a: MalArgs) -> MalRet {
 
     match ureq::get(s).call() {
         Ok(response) => Ok(Str(response.into_string().unwrap())),
-        Err(Error::Status(code, response)) => error(&format!("curl::get {}", code)),
+        Err(Error::Status(code, _response)) => error(&format!("curl::get {}", code)),
         Err(_) => error("curl::get: error acessing remote resource."),
     }
 }

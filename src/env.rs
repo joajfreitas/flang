@@ -1,4 +1,3 @@
-use log::{info, error};
 use std::sync::Arc;
 use std::sync::RwLock;
 
