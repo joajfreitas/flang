@@ -99,12 +99,12 @@ fn car(a: MalArgs) -> MalRet {
     match &a[0] {
         Vector(v, _) | List(v, _) => {
             if v.len() == 0 {
-                return Ok(Nil);
+                return error("You cannot ask for the car of an empty list.");
             }
             Ok(v[0].clone())
         },
         Nil => Ok(Nil),
-        _ => error("Trying to find the car of something that is not a list or vector"),
+        _ => error("The Law of Car: the primitive car is defined only for non-empty lists."),
     }
 }
 
@@ -112,12 +112,12 @@ fn cdr(a: MalArgs) -> MalRet {
     match &a[0] {
         Vector(v, _) | List(v, _) => {
             if v.len() == 0 {
-                return Ok(list![]);
+                return error("You cannot ask for the cdr of an empty list.");
             }
             Ok(list!(v[1..].to_vec()))
         },
         Nil => Ok(list!()),
-        _ => error("Trying to find the car of something that is not a list or vector"),
+        _ => error("The Law of Cdr:\nThe primitive cdr is defined only for non-empty lists. The cdr of any non-empty list is always another list."),
     }
 }
 
@@ -128,7 +128,7 @@ fn cons(a: MalArgs) -> MalRet {
             nv.extend_from_slice(v);
             Ok(list!(nv.to_vec()))
         }
-        _ => error("Called cons with a second argument that is not a list or a vector"),
+        _ => error("The Law of Cons:\nThe primitive cons takes two arguments. The second argument to cons must be a list. The result is a list."),
     }
 }
 
@@ -703,6 +703,7 @@ pub fn ns() -> Vec<(&'static str, &'static str, MalVal)> {
         ("", "filter", func(filter)),
         ("", "reduce", func(reduce)),
         ("", "nil?", func(fn_is_type!(Nil))),
+        ("", "null?", func(fn_is_type!(Nil))),
         ("", "true?", func(fn_is_type!(Bool(true)))),
         ("", "false?", func(fn_is_type!(Bool(false)))),
         ("", "symbol?", func(fn_is_type!(Sym(_)))),
