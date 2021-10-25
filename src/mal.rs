@@ -2,18 +2,11 @@ use std::sync::Arc;
 use fnv::FnvHashMap;
 use itertools::Itertools;
 
-//extern crate rustyline;
-//extern crate itertools;
-
-//use rustyline::error::ReadlineError;
-//use rustyline::Editor;
-
 use crate::types::{MalVal, MalArgs, MalRet, MalErr};
 use crate::types::MalErr::{ErrString, ErrMalVal};
 use crate::types::MalVal::{Bool, Func, List, MalFunc, Nil, Sym, Str, Vector, Hash};
 use crate::types::error;
 use crate::env::{env_new, env_bind, env_set, env_get, Env, env_list_namespace};
-//use crate::core::ns;
 use crate::reader::read_str;
 
 #[macro_export]
@@ -233,8 +226,8 @@ fn eval(mut ast: MalVal, mut env: Env) -> MalRet {
                     },
                     Sym(ref a0) if a0 == "do" => {
                         match eval_ast(&list!(l[1..].to_vec()), &env)? {
-                            List(_, _) => {
-                                ast = l.last().unwrap_or(&Nil).clone();
+                            List(r, _) => {
+                                ast = r.last().unwrap_or(&Nil).clone();
                                 continue 'tco;
                             }
                             _ => error("invalid do form"),
