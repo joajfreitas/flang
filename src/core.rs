@@ -2,6 +2,9 @@ use log::error;
 use regex::Regex;
 use dyn_fmt::AsStrFormatExt;
 use ureq::Error;
+use itertools::Itertools;
+use num_bigint::{BigInt, Sign, RandBigInt, UniformBigInt};
+use rand::{random, thread_rng, Rng};
 
 use std::fs::File;
 use std::io::Read;
@@ -9,13 +12,10 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::fs;
 
-use itertools::Itertools;
-
-use num_bigint::{BigInt, Sign};
 
 use crate::types::{MalVal, MalErr, MalArgs, MalRet, atom, hash_map, _dissoc, _assoc};
 use crate::types::MalVal::{Nil, Bool, Int, Sym, Str, Vector, List, Atom, Hash, Func, MalFunc};
-use crate::types::{error, func, int_to_bigint};
+use crate::types::{error, func, int_to_bigint, bigint_to_i32};
 use crate::types::MalErr::{ErrMalVal, ErrString};
 use crate::mal::rep;
 
@@ -611,6 +611,27 @@ pub fn flatten(a: MalArgs) -> MalRet {
     return Ok(vector![xs]);
 }
 
+pub fn mal_random(a: MalArgs) -> MalRet {
+    let x: i32 = random();
+    Ok(Int(int_to_bigint(x as i64)))
+}
+
+pub fn mal_randrange(a: MalArgs) -> MalRet {
+    let mut rng = thread_rng();
+
+    match (&a[0], &a[1]) {
+        (Int(i1), Int(i2)) => {Ok(Int(rng.gen_bigint_range(i1, i2)))},
+        _ => error("randrange"),
+    }
+}
+
+pub fn mal_sys_exit(a: MalArgs) -> MalRet  {
+    match &a[0] {
+        Int(i1) => std::process::exit(bigint_to_i32(i1.clone())),
+        _ => error("exit: expected an integer")
+    }
+}
+
 pub fn ns() -> Vec<(&'static str, &'static str, MalVal)> {
     vec![
         ("", "throw", func(|a| Err(ErrMalVal(a[0].clone())))),
@@ -730,7 +751,10 @@ pub fn ns() -> Vec<(&'static str, &'static str, MalVal)> {
         ("path", "join", func(path_join)),
         ("curl", "get", func(curl_get)),
         ("list", "dedup", func(dedup)),
-        ("", "flatten", func(flatten)),
+        ("list", "flatten", func(flatten)),
+        ("rnd", "random", func(mal_random)),
+        ("rnd", "randrange", func(mal_randrange)),
+        ("sys", "exit", func(mal_sys_exit)),
     ]
 }
 

@@ -9,7 +9,7 @@ flang is implemented in Rust and is based on the Rust implementation of mal by
 
 ## Running
 ```
-cargo run
+cargo run --bin flang repl
 user> (print "hello world")
 hello world
 ```

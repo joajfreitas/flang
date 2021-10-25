@@ -1,6 +1,3 @@
-extern crate exitcode;
-extern crate colored;
-
 use colored::*;
 use serde::{Serialize, Deserialize};
 

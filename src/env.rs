@@ -32,7 +32,7 @@ pub fn env_new(outer: Option<Env>) -> Env {
 pub fn env_bind(outer: Option<Env>, mbinds: MalVal, exprs: MalArgs) -> Result<Env, MalErr>
 {
     let env = env_new(outer);
-    match mbinds {
+    match mbinds.clone() {
         List(binds, _) | Vector(binds, _) => {
             for (i, b) in binds.iter().enumerate() {
                 match b {

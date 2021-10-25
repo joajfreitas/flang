@@ -4,7 +4,8 @@ use itertools::Itertools;
 use colored::*;
 
 use fnv::FnvHashMap;
-use num_bigint::{BigInt, Sign};
+use num_bigint::{BigInt, BigUint, Sign};
+use num_traits::ToPrimitive;
 
 use crate::types::MalVal::{Atom, Bool, Func, Int, List, MalFunc, Nil, Str, Sym, Vector, Hash};
 use crate::types::MalErr::{ErrString};
@@ -71,6 +72,11 @@ pub fn int_to_bigint(i: i64) -> BigInt {
     else {
         BigInt::new(Sign::NoSign, vec![])
     }
+}
+
+pub fn bigint_to_i32(i: BigInt) -> i32 {
+    let mask = BigUint::from(u32::MAX);
+    (i.to_biguint().unwrap() & mask).to_u32().unwrap() as i32
 }
 
 
