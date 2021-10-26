@@ -1,0 +1,12 @@
+(def! null? nil?)
+(def! atom? (fn* (x) (not (list? x))))
+(def! eq? =)
+(def! #t true)
+(def! #f false)
+
+(def! lat? (fn* (l) 
+             (if (null? l) 
+               #t 
+               (if (atom? (car l)) 
+                 (lat? (cdr l)) 
+                 #f))))

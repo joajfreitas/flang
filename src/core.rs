@@ -3,8 +3,8 @@ use regex::Regex;
 use dyn_fmt::AsStrFormatExt;
 use ureq::Error;
 use itertools::Itertools;
-use num_bigint::{BigInt, Sign, RandBigInt, UniformBigInt};
-use rand::{random, thread_rng, Rng};
+use num_bigint::{BigInt, Sign, RandBigInt};
+use rand::{random, thread_rng};
 
 use std::fs::File;
 use std::io::Read;
@@ -611,7 +611,7 @@ pub fn flatten(a: MalArgs) -> MalRet {
     return Ok(vector![xs]);
 }
 
-pub fn mal_random(a: MalArgs) -> MalRet {
+pub fn mal_random(_a: MalArgs) -> MalRet {
     let x: i32 = random();
     Ok(Int(int_to_bigint(x as i64)))
 }
@@ -629,6 +629,14 @@ pub fn mal_sys_exit(a: MalArgs) -> MalRet  {
     match &a[0] {
         Int(i1) => std::process::exit(bigint_to_i32(i1.clone())),
         _ => error("exit: expected an integer")
+    }
+}
+
+pub fn mal_is_nil(a: MalArgs) -> MalRet {
+    match &a[0] {
+        Nil => Ok(Bool(true)),
+        List(l, _) => {if l.len() == 0 {Ok(Bool(true))} else {Ok(Bool(false))}},
+        _ => Ok(Bool(false)),
     }
 }
 
@@ -702,8 +710,7 @@ pub fn ns() -> Vec<(&'static str, &'static str, MalVal)> {
         ("", "map", func(map)),
         ("", "filter", func(filter)),
         ("", "reduce", func(reduce)),
-        ("", "nil?", func(fn_is_type!(Nil))),
-        ("", "null?", func(fn_is_type!(Nil))),
+        ("", "nil?", func(mal_is_nil)),
         ("", "true?", func(fn_is_type!(Bool(true)))),
         ("", "false?", func(fn_is_type!(Bool(false)))),
         ("", "symbol?", func(fn_is_type!(Sym(_)))),
