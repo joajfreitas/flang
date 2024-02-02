@@ -1,0 +1,48 @@
+name: Rust
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: Swatinem/rust-cache@v1
+    - name: Version
+      run: rustc --version
+    - name: Build
+      run: cargo rustc --lib --verbose -- -D warnings
+       | cargo rustc --bin flang --verbose -- -D warnings
+
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: Swatinem/rust-cache@v1
+      - uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: --all-features -- -D warnings
+
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - uses: Swatinem/rust-cache@v1
+    - name: Unit tests
+      run: cargo test
+
+  format-check:
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v2
+        - name: Run rustfmt
+          run: cargo fmt
