@@ -20,18 +20,18 @@ use crate::env::{env_new, env_set_from_vector, Env};
 use crate::printer::pr_seq;
 
 macro_rules! fn_t_int_int {
-    ($ret:ident, $fn:expr) => {{
+    ($ret:ident, |$x: ident, $y: ident|{$fn:expr}) => {{
         |a: Vec<MalVal>| match (a[0].clone(), a[1].clone()) {
-            (Int(a0), Int(a1)) => Ok($ret($fn(a0, a1))),
+            (Int($x), Int($y)) => Ok($ret($fn)),
             _ => error("expecting (int,int) args"),
         }
     }};
 }
 
 macro_rules! fn_t_bool_bool {
-    ($ret:ident, $fn:expr) => {{
+    ($ret:ident, |$x:ident, $y:ident| {$fn:expr}) => {{
         |a: Vec<MalVal>| match (a[0].clone(), a[1].clone()) {
-            (Bool(a0), Bool(a1)) => Ok($ret($fn(a0, a1))),
+            (Bool($x), Bool($y)) => Ok($ret($fn)),
             _ => error("expecting (bool,bool) args"),
         }
     }};
@@ -60,11 +60,11 @@ macro_rules! fn_is_type {
 
 fn slurp(f: String) -> MalRet {
     let mut s = String::new();
-    match File::open(f.to_string()).and_then(|mut f| f.read_to_string(&mut s)) {
+    match File::open(&f).and_then(|mut f| f.read_to_string(&mut s)) {
         Ok(_) => Ok(Str(s)),
         Err(e) => {
-            println!("slurp: {}", e.to_string());
-            error(&format!("slurp: {}, {}", &e.to_string(), f))
+            println!("slurp: {}", e);
+            error(&format!("slurp: {}, {}", e, f))
         }
     }
 }
@@ -165,7 +165,7 @@ fn apply(a: MalArgs) -> MalRet {
         List(ref v, _) | Vector(ref v, _) => {
             let f = &a[0];
             let mut fargs = a[1..a.len() - 1].to_vec();
-            fargs.extend_from_slice(&v);
+            fargs.extend_from_slice(v);
             f.apply(fargs)
         }
         _ => error("apply called with non-seq"),
@@ -269,7 +269,7 @@ fn keys(a: MalArgs) -> MalRet {
 
 fn vals(a: MalArgs) -> MalRet {
     match a[0] {
-        Hash(ref hm, _) => Ok(list!(hm.values().map(|v| { v.clone() }).collect())),
+        Hash(ref hm, _) => Ok(list!(hm.values().cloned().collect())),
         _ => error("keys requires Hash Map"),
     }
 }
@@ -289,7 +289,7 @@ fn seq(a: MalArgs) -> MalRet {
     match a[0] {
         List(ref v, _) | Vector(ref v, _) if v.len() == 0 => Ok(Nil),
         List(ref v, _) | Vector(ref v, _) => Ok(list!(v.to_vec())),
-        Str(ref s) if s.len() == 0 => Ok(Nil),
+        Str(ref s) if s.is_empty() => Ok(Nil),
         Str(ref s) if !a[0].keyword_q() => {
             Ok(list!(s.chars().map(|c| { Str(c.to_string()) }).collect()))
         }
@@ -301,11 +301,7 @@ fn seq(a: MalArgs) -> MalRet {
 fn conj(a: MalArgs) -> MalRet {
     match a[0] {
         List(ref v, _) => {
-            let sl = a[1..]
-                .iter()
-                .rev()
-                .map(|a| a.clone())
-                .collect::<Vec<MalVal>>();
+            let sl = a[1..].iter().rev().cloned().collect::<Vec<MalVal>>();
             Ok(list!([&sl[..], v].concat()))
         }
         Vector(ref v, _) => Ok(vector!([v, &a[1..]].concat())),
@@ -351,10 +347,9 @@ fn sum(a: MalArgs) -> MalRet {
     match &a[0] {
         List(v, _) | Vector(v, _) => {
             let mut aux = 0;
-            for i in v.to_vec() {
-                match i {
-                    Int(i) => aux = aux + i,
-                    _ => {}
+            for i in v.iter() {
+                if let Int(i) = i {
+                    aux += i;
                 }
             }
             Ok(Int(aux))
@@ -367,10 +362,9 @@ fn mul(a: MalArgs) -> MalRet {
     match &a[0] {
         List(v, _) | Vector(v, _) => {
             let mut aux: i64 = 1;
-            for i in v.to_vec() {
-                match i {
-                    Int(i) => aux = aux * i,
-                    _ => {}
+            for i in v.iter() {
+                if let Int(i) = i {
+                    aux *= i;
                 }
             }
             Ok(Int(aux))
@@ -402,24 +396,19 @@ fn replace(a: MalArgs) -> MalRet {
     Ok(Str(s.replace(old, new)))
 }
 
-fn format(a: MalArgs) -> MalRet {
+fn format(args: MalArgs) -> MalRet {
     let mut strs: Vec<&str> = Vec::new();
-    let fmt = match &a[0] {
+    let fmt = match &args[0] {
         Str(s) => s,
         _ => return error("format: 1st argument is not a string"),
     };
 
-    for i in 1..a.len() {
-        match &a[i] {
-            Str(s) => strs.push(&s),
-            Sym(s) => strs.push(&s),
+    for arg in args.iter().skip(1) {
+        match arg {
+            Str(s) => strs.push(s),
+            Sym(s) => strs.push(s),
             Nil => strs.push("Nil"),
-            _ => {
-                return error(&format!(
-                    "format: argument is not a string {:?} {}",
-                    &a[i], i
-                ))
-            }
+            _ => return error(&format!("format: argument is not a string {:?}", arg)),
         };
     }
 
@@ -434,7 +423,7 @@ fn join(a: MalArgs) -> MalRet {
 
     let strs = (*v).iter().map(|x| x.to_string()).collect::<Vec<String>>();
 
-    Ok(Str((strs).join(&s)))
+    Ok(Str((strs).join(s)))
 }
 
 fn mal_in(a: MalArgs) -> MalRet {
@@ -470,7 +459,7 @@ pub fn mal_not(a: MalArgs) -> MalRet {
         _ => return error(""),
     };
 
-    return Ok(Bool(x));
+    Ok(Bool(x))
 }
 
 pub fn cat(a: MalArgs) -> MalRet {
@@ -484,7 +473,7 @@ pub fn cat(a: MalArgs) -> MalRet {
         _ => return error("cat: wrong argument type"),
     };
 
-    return Ok(Str(x.clone()));
+    Ok(Str(x.clone()))
 }
 
 pub fn path_join(a: MalArgs) -> MalRet {
@@ -525,8 +514,8 @@ pub fn dedup(a: MalArgs) -> MalRet {
 
     match &a[0] {
         List(vs, _) | Vector(vs, _) => {
-            for v in vs.to_vec() {
-                if !ys.contains(&v) {
+            for v in vs.iter() {
+                if !ys.contains(v) {
                     ys.push(v.clone());
                 }
             }
@@ -541,11 +530,11 @@ pub fn flatten(a: MalArgs) -> MalRet {
 
     match &a[0] {
         List(vs, _) | Vector(vs, _) => {
-            for v in vs.to_vec() {
+            for v in vs.iter() {
                 match v {
                     List(us, _) | Vector(us, _) => {
-                        for u in us.to_vec() {
-                            xs.push(u);
+                        for u in us.iter() {
+                            xs.push(u.clone());
                         }
                     }
                     _ => {}
@@ -555,7 +544,7 @@ pub fn flatten(a: MalArgs) -> MalRet {
         _ => {}
     };
 
-    return Ok(vector![xs]);
+    Ok(vector![xs])
 }
 
 pub fn mal_random(_a: MalArgs) -> MalRet {
@@ -593,48 +582,35 @@ pub fn mal_is_nil(a: MalArgs) -> MalRet {
     }
 }
 
-pub fn ns() -> Vec<(&'static str, &'static str, MalVal)> {
+pub fn ns() -> Vec<(&'static str, MalVal)> {
     vec![
-        ("", "throw", func(|a| Err(ErrMalVal(a[0].clone())))),
-        ("", "=", func(|a| Ok(Bool(a[0] == a[1])))),
-        ("", "!=", func(|a| Ok(Bool(a[0] != a[1])))),
-        ("", "+", func(fn_t_int_int!(Int, |i, j| { i + j }))),
-        ("", "-", func(fn_t_int_int!(Int, |i, j| { i - j }))),
-        ("", "*", func(fn_t_int_int!(Int, |i, j| { i * j }))),
-        ("", "/", func(fn_t_int_int!(Int, |i, j| { i / j }))),
-        ("", ">", func(fn_t_int_int!(Bool, |i, j| { i > j }))),
-        ("", ">=", func(fn_t_int_int!(Bool, |i, j| { i >= j }))),
-        ("", "<", func(fn_t_int_int!(Bool, |i, j| { i < j }))),
-        ("", "<=", func(fn_t_int_int!(Bool, |i, j| { i <= j }))),
-        ("mal", "in", func(mal_in)),
-        ("", "not", func(mal_not)),
-        ("", "and", func(fn_t_bool_bool!(Bool, |i, j| { i && j }))),
-        ("", "or", func(fn_t_bool_bool!(Bool, |i, j| { i || j }))),
+        ("throw", func(|a| Err(ErrMalVal(a[0].clone())))),
+        ("=", func(|a| Ok(Bool(a[0] == a[1])))),
+        ("!=", func(|a| Ok(Bool(a[0] != a[1])))),
+        ("+", func(fn_t_int_int!(Int, |i, j| { i + j }))),
+        ("-", func(fn_t_int_int!(Int, |i, j| { i - j }))),
+        ("*", func(fn_t_int_int!(Int, |i, j| { i * j }))),
+        ("/", func(fn_t_int_int!(Int, |i, j| { i / j }))),
+        (">", func(fn_t_int_int!(Bool, |i, j| { i > j }))),
+        (">=", func(fn_t_int_int!(Bool, |i, j| { i >= j }))),
+        ("<", func(fn_t_int_int!(Bool, |i, j| { i < j }))),
+        ("<=", func(fn_t_int_int!(Bool, |i, j| { i <= j }))),
+        ("in", func(mal_in)),
+        ("not", func(mal_not)),
+        ("and", func(fn_t_bool_bool!(Bool, |i, j| { i && j }))),
+        ("or", func(fn_t_bool_bool!(Bool, |i, j| { i || j }))),
+        ("nand", func(fn_t_bool_bool!(Bool, |i, j| { !(i && j) }))),
+        ("nor", func(fn_t_bool_bool!(Bool, |i, j| { !(i || j) }))),
+        ("xor", func(fn_t_bool_bool!(Bool, |i, j| { i ^ j }))),
+        ("xnor", func(fn_t_bool_bool!(Bool, |i, j| { !(i ^ j) }))),
+        ("list", func(|a| Ok(list!(a)))),
+        ("list?", func(fn_is_type!(List(_, _)))),
+        ("empty?", func(|a| a[0].empty_q())),
+        ("!empty?", func(not_empty)),
+        ("count", func(|a| a[0].count())),
+        ("pr-str", func(|a| Ok(Str(pr_seq(&a, true, "", "", " "))))),
+        ("str", func(|a| Ok(Str(pr_seq(&a, false, "", "", ""))))),
         (
-            "",
-            "nand",
-            func(fn_t_bool_bool!(Bool, |i, j| { !(i && j) })),
-        ),
-        ("", "nor", func(fn_t_bool_bool!(Bool, |i, j| { !(i || j) }))),
-        ("", "xor", func(fn_t_bool_bool!(Bool, |i, j| { i ^ j }))),
-        (
-            "",
-            "xnor",
-            func(fn_t_bool_bool!(Bool, |i, j| { !((i ^ j) as bool) })),
-        ),
-        ("", "list", func(|a| Ok(list!(a)))),
-        ("", "list?", func(fn_is_type!(List(_, _)))),
-        ("", "empty?", func(|a| a[0].empty_q())),
-        ("", "!empty?", func(not_empty)),
-        ("", "count", func(|a| a[0].count())),
-        (
-            "",
-            "pr-str",
-            func(|a| Ok(Str(pr_seq(&a, true, "", "", " ")))),
-        ),
-        ("", "str", func(|a| Ok(Str(pr_seq(&a, false, "", "", ""))))),
-        (
-            "",
             "prn",
             func(|a| {
                 println!("{}", pr_seq(&a, true, "", "", " "));
@@ -642,7 +618,6 @@ pub fn ns() -> Vec<(&'static str, &'static str, MalVal)> {
             }),
         ),
         (
-            "",
             "println",
             func(|a| {
                 println!("{}", pr_seq(&a, false, "", "", " "));
@@ -650,98 +625,89 @@ pub fn ns() -> Vec<(&'static str, &'static str, MalVal)> {
             }),
         ),
         (
-            "",
             "print",
             func(|a| {
                 println!("{}", pr_seq(&a, false, "", "", " "));
                 Ok(Nil)
             }),
         ),
-        ("", "read-string", func(fn_str!(|s| { read_str(s) }))),
-        ("", "slurp", func(fn_str!(|s| { slurp(s) }))),
-        ("os", "read", func(fn_str!(|s| { slurp(s) }))),
-        ("", "atom", func(|a| Ok(atom(&a[0])))),
-        ("", "atom?", func(fn_is_type!(Atom(_)))),
-        ("", "deref", func(|a| a[0].deref())),
-        ("", "reset!", func(|a| a[0].reset_bang(&a[1]))),
-        ("", "swap!", func(|a| a[0].swap_bang(&a[1..].to_vec()))),
-        ("", "car", func(car)),
-        ("", "cdr", func(cdr)),
-        ("", "cons", func(cons)),
-        ("", "concat", func(concat)),
-        ("", "quasiquote", func(concat)),
-        ("", "vec", func(vec)),
-        ("", "nth", func(nth)),
-        ("", "first", func(car)),
-        ("", "rest", func(cdr)),
-        ("", "apply", func(apply)),
-        ("", "map", func(map)),
-        ("", "filter", func(filter)),
-        ("", "reduce", func(reduce)),
-        ("", "nil?", func(mal_is_nil)),
-        ("", "true?", func(fn_is_type!(Bool(true)))),
-        ("", "false?", func(fn_is_type!(Bool(false)))),
-        ("", "symbol?", func(fn_is_type!(Sym(_)))),
-        ("", "symbol", func(symbol)),
-        ("", "keyword", func(|a| a[0].keyword())),
+        ("read-string", func(fn_str!(read_str))),
+        ("slurp", func(fn_str!(slurp))),
+        ("read", func(fn_str!(slurp))),
+        ("atom", func(|a| Ok(atom(&a[0])))),
+        ("atom?", func(fn_is_type!(Atom(_)))),
+        ("deref", func(|a| a[0].deref())),
+        ("reset!", func(|a| a[0].reset_bang(&a[1]))),
+        ("swap!", func(|a| a[0].swap_bang(&a[1..].to_vec()))),
+        ("car", func(car)),
+        ("cdr", func(cdr)),
+        ("cons", func(cons)),
+        ("concat", func(concat)),
+        ("quasiquote", func(concat)),
+        ("vec", func(vec)),
+        ("nth", func(nth)),
+        ("first", func(car)),
+        ("rest", func(cdr)),
+        ("apply", func(apply)),
+        ("map", func(map)),
+        ("filter", func(filter)),
+        ("reduce", func(reduce)),
+        ("nil?", func(mal_is_nil)),
+        ("true?", func(fn_is_type!(Bool(true)))),
+        ("false?", func(fn_is_type!(Bool(false)))),
+        ("symbol?", func(fn_is_type!(Sym(_)))),
+        ("symbol", func(symbol)),
+        ("keyword", func(|a| a[0].keyword())),
         (
-            "",
             "keyword?",
-            func(fn_is_type!(Str(ref s) if s.starts_with("\u{29e}"))),
+            func(fn_is_type!(Str(ref s) if s.starts_with('\u{29e}'))),
         ),
-        ("", "vector", func(|a| Ok(vector!(a)))),
-        ("", "vector?", func(fn_is_type!(Vector(_, _)))),
+        ("vector", func(|a| Ok(vector!(a)))),
+        ("vector?", func(fn_is_type!(Vector(_, _)))),
+        ("sequential?", func(fn_is_type!(List(_, _), Vector(_, _)))),
+        ("hash-map", func(hash_map)),
+        ("map?", func(fn_is_type!(Hash(_, _)))),
+        ("assoc", func(assoc)),
+        ("dissoc", func(dissoc)),
+        ("get", func(get)),
+        ("contains?", func(contains_q)),
+        ("keys", func(keys)),
+        ("vals", func(vals)),
+        ("type", func(type_info)),
+        ("time-ms", func(time_ms)),
+        ("meta", func(|a| a[0].get_meta())),
+        ("with-meta", func(|a| a[0].clone().with_meta(&a[1]))),
         (
-            "",
-            "sequential?",
-            func(fn_is_type!(List(_, _), Vector(_, _))),
-        ),
-        ("", "hash-map", func(|a| hash_map(a))),
-        ("", "map?", func(fn_is_type!(Hash(_, _)))),
-        ("", "assoc", func(assoc)),
-        ("", "dissoc", func(dissoc)),
-        ("", "get", func(get)),
-        ("", "contains?", func(contains_q)),
-        ("", "keys", func(keys)),
-        ("", "vals", func(vals)),
-        ("", "type", func(type_info)),
-        ("", "time-ms", func(time_ms)),
-        ("", "meta", func(|a| a[0].get_meta())),
-        ("", "with-meta", func(|a| a[0].clone().with_meta(&a[1]))),
-        (
-            "",
             "fn?",
             func(fn_is_type!(MalFunc{is_macro,..} if !is_macro,Func(_,_))),
         ),
         (
-            "",
             "string?",
-            func(fn_is_type!(Str(ref s) if !s.starts_with("\u{29e}"))),
+            func(fn_is_type!(Str(ref s) if !s.starts_with('\u{29e}'))),
         ),
-        ("", "number?", func(fn_is_type!(Int(_)))),
-        ("", "seq", func(seq)),
-        ("", "conj", func(conj)),
+        ("number?", func(fn_is_type!(Int(_)))),
+        ("seq", func(seq)),
+        ("conj", func(conj)),
         (
-            "",
             "macro?",
             func(fn_is_type!(MalFunc{is_macro,..} if is_macro)),
         ),
-        ("parse", "int", func(int)),
-        ("math", "combinations", func(combinations)),
-        ("math", "sum", func(sum)),
-        ("math", "mul", func(mul)),
-        ("string", "split", func(split)),
-        ("string", "format", func(format)),
-        ("string", "join", func(join)),
-        ("string", "replace", func(replace)),
-        ("string", "cat", func(cat)),
-        ("path", "join", func(path_join)),
-        ("curl", "get", func(curl_get)),
-        ("list", "dedup", func(dedup)),
-        ("list", "flatten", func(flatten)),
-        ("rnd", "random", func(mal_random)),
-        ("rnd", "randrange", func(mal_randrange)),
-        ("sys", "exit", func(mal_sys_exit)),
+        ("int", func(int)),
+        ("combinations", func(combinations)),
+        ("sum", func(sum)),
+        ("mul", func(mul)),
+        ("split", func(split)),
+        ("format", func(format)),
+        ("join", func(join)),
+        ("replace", func(replace)),
+        ("cat", func(cat)),
+        ("join", func(path_join)),
+        ("get", func(curl_get)),
+        ("dedup", func(dedup)),
+        ("flatten", func(flatten)),
+        ("random", func(mal_random)),
+        ("randrange", func(mal_randrange)),
+        ("exit", func(mal_sys_exit)),
     ]
 }
 

@@ -25,7 +25,7 @@ struct Opts {
 }
 
 fn prelude(repl_env: &Env, args: Args) {
-    env_sets(repl_env, "", "*ARGV*", list!(args.map(Str).collect()));
+    env_sets(repl_env, "*ARGV*", list!(args.map(Str).collect()));
 
     let _ = rep(
         "(def! load-file (fn* (f) (eval (read-string (str \"(do \" (slurp f)\"\nnil)\")))))"

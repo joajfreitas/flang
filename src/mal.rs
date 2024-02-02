@@ -2,7 +2,7 @@ use fnv::FnvHashMap;
 use itertools::Itertools;
 use std::sync::Arc;
 
-use crate::env::{env_bind, env_get, env_list_namespace, env_new, env_set, Env};
+use crate::env::{env_bind, env_get, env_new, env_set, Env};
 use crate::reader::read_str;
 use crate::types::error;
 use crate::types::MalErr::{ErrMalVal, ErrString};
@@ -44,9 +44,9 @@ fn qq_iter(elts: &MalArgs) -> MalVal {
                 }
             }
         }
-        acc = list![Sym("cons".to_string()), quasiquote(&elt), acc];
+        acc = list![Sym("cons".to_string()), quasiquote(elt), acc];
     }
-    return acc;
+    acc
 }
 
 fn quasiquote(ast: &MalVal) -> MalVal {
@@ -59,10 +59,10 @@ fn quasiquote(ast: &MalVal) -> MalVal {
                     }
                 }
             }
-            return qq_iter(&v);
+            qq_iter(v)
         }
-        Vector(v, _) => return list![Sym("vec".to_string()), qq_iter(&v)],
-        Hash(_, _) | Sym(_) => return list![Sym("quote".to_string()), ast.clone()],
+        Vector(v, _) => list![Sym("vec".to_string()), qq_iter(v)],
+        Hash(_, _) | Sym(_) => list![Sym("quote".to_string()), ast.clone()],
         _ => ast.clone(),
     }
 }
@@ -92,7 +92,7 @@ fn macroexpand(mut ast: MalVal, env: &Env) -> (bool, MalRet) {
 
 fn eval_ast(ast: &MalVal, env: &Env) -> MalRet {
     match ast {
-        Sym(s) => Ok(env_get(&env, &Sym(s.clone()))?),
+        Sym(s) => Ok(env_get(env, &Sym(s.clone()))?),
         List(l, _) => {
             let mut lst: Vec<MalVal> = vec![];
             for e in l.iter() {
@@ -149,10 +149,10 @@ fn eval(mut ast: MalVal, mut env: Env) -> MalRet {
                             ..
                         } => {
                             let f = MalFunc {
-                                eval: eval,
+                                eval,
                                 ast: ast.clone(),
                                 env: env.clone(),
-                                params: params,
+                                params,
                                 is_macro: true,
                                 meta: Arc::new(Nil),
                             };
@@ -244,7 +244,7 @@ fn eval(mut ast: MalVal, mut env: Env) -> MalRet {
                     Sym(ref a0) if a0 == "fn*" => {
                         let (a1, a2) = (l[1].clone(), l[2].clone());
                         Ok(MalFunc {
-                            eval: eval,
+                            eval,
                             ast: Arc::new(a2),
                             env: env.clone(),
                             params: Arc::new(a1),
@@ -258,14 +258,6 @@ fn eval(mut ast: MalVal, mut env: Env) -> MalRet {
                             env = e.clone();
                         }
                         continue 'tco;
-                    }
-                    Sym(ref a0sym) if a0sym == "show" => {
-                        let values = env_list_namespace(&env, l[1].to_string());
-                        Ok(vector![values
-                            .unwrap()
-                            .iter()
-                            .map(|x| Str(x.to_string()))
-                            .collect()])
                     }
                     _ => match eval_ast(&ast, &env)? {
                         List(el, _) => {

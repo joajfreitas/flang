@@ -55,13 +55,7 @@ pub fn pr_seq(seq: &Vec<MalVal>, start: &str, end: &str) -> String {
 }
 */
 
-pub fn pr_seq(
-    seq: &[MalVal],
-    print_readably: bool,
-    start: &str,
-    end: &str,
-    join: &str,
-) -> String {
+pub fn pr_seq(seq: &[MalVal], print_readably: bool, start: &str, end: &str, join: &str) -> String {
     let strs: Vec<String> = seq.iter().map(|x| x.pr_str(print_readably)).collect();
     format!("{}{}{}", start, strs.join(join), end)
 }

@@ -34,10 +34,7 @@ pub fn read_str(str: String) -> MalRet {
     if tokens.is_empty() {
         return error("no input");
     }
-    let mut reader = Reader {
-        tokens: tokens,
-        pos: 0,
-    };
+    let mut reader = Reader { tokens, pos: 0 };
 
     read_form(&mut reader)
 }
@@ -128,7 +125,7 @@ fn read_seq(reader: &mut Reader, end: &str) -> MalRet {
 fn unescape_str(s: &str) -> String {
     let re: Regex = Regex::new(r#"\\(.)"#).unwrap();
     re.replace_all(s, |caps: &Captures| {
-       (if &caps[1] == "n" { "\n" } else { &caps[1] }).to_string()
+        (if &caps[1] == "n" { "\n" } else { &caps[1] }).to_string()
     })
     .to_string()
 }
