@@ -1,6 +1,5 @@
 use crate::types::MalVal;
-use crate::types::MalVal::{Atom, Bool, Func, Int, List, MalFunc, Nil, Str, Sym, Vector, Hash};
-
+use crate::types::MalVal::{Atom, Bool, Func, Hash, Int, List, MalFunc, Nil, Str, Sym, Vector};
 
 fn escape_str(s: &str) -> String {
     s.chars()
@@ -21,11 +20,11 @@ impl MalVal {
             Bool(b) => match b {
                 false => "false".to_string(),
                 true => "true".to_string(),
-            }
-            Int(i) => i.to_string(), 
+            },
+            Int(i) => i.to_string(),
             Str(s) => {
-                if s.starts_with("\u{29e}") {
-                    format!(":{}", &s[2..])
+                if let Some(stripped) = s.strip_prefix('\u{29e}') {
+                    format!(":{}", stripped)
                 } else if print_readably {
                     format!("\"{}\"", escape_str(s))
                 } else {
@@ -43,11 +42,10 @@ impl MalVal {
                 pr_seq(&l, print_readably, "{", "}", " ")
             }
             Func(f, _) => format!("#{:?}", f),
-            MalFunc {..} => "mal function".to_string(),
-            Atom(a) => format!("(atom {})", a.read().unwrap().pr_str(print_readably))
+            MalFunc { .. } => "mal function".to_string(),
+            Atom(a) => format!("(atom {})", a.read().unwrap().pr_str(print_readably)),
         }
     }
-
 }
 
 /*
@@ -57,9 +55,8 @@ pub fn pr_seq(seq: &Vec<MalVal>, start: &str, end: &str) -> String {
 }
 */
 
-
 pub fn pr_seq(
-    seq: &Vec<MalVal>,
+    seq: &[MalVal],
     print_readably: bool,
     start: &str,
     end: &str,

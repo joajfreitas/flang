@@ -1,21 +1,20 @@
+use colored::*;
+use itertools::Itertools;
+use std::fmt;
 use std::sync::Arc;
 use std::sync::RwLock;
-use itertools::Itertools;
-use colored::*;
 
 use fnv::FnvHashMap;
-use num_bigint::{BigInt, BigUint, Sign};
-use num_traits::ToPrimitive;
 
-use crate::types::MalVal::{Atom, Bool, Func, Int, List, MalFunc, Nil, Str, Sym, Vector, Hash};
-use crate::types::MalErr::{ErrString};
-use crate::env::{Env, env_bind};
+use crate::env::{env_bind, Env};
+use crate::types::MalErr::ErrString;
+use crate::types::MalVal::{Atom, Bool, Func, Hash, Int, List, MalFunc, Nil, Str, Sym, Vector};
 
 #[derive(Debug, Clone)]
 pub enum MalVal {
     Nil,
     Bool(bool),
-    Int(BigInt),
+    Int(i64),
     Str(String),
     Sym(String),
     List(Arc<Vec<MalVal>>, Arc<MalVal>),
@@ -32,7 +31,6 @@ pub enum MalVal {
     },
     Atom(Arc<RwLock<MalVal>>),
 }
-
 
 #[derive(Debug)]
 pub enum MalErr {
@@ -58,58 +56,37 @@ pub fn func(f: fn(MalArgs) -> MalRet) -> MalVal {
     Func(f, Arc::new(Nil))
 }
 
-pub fn atom(mv: &MalVal) -> MalVal{
+pub fn atom(mv: &MalVal) -> MalVal {
     Atom(Arc::new(RwLock::new(mv.clone())))
 }
-
-pub fn int_to_bigint(i: i64) -> BigInt {
-    if i > 0 {
-        BigInt::new(Sign::Plus, vec![i as u32])
-    }
-    else if i < 0 {
-        BigInt::new(Sign::Minus, vec![(-i) as u32])
-    }
-    else {
-        BigInt::new(Sign::NoSign, vec![])
-    }
-}
-
-pub fn bigint_to_i32(i: BigInt) -> i32 {
-    let mask = BigUint::from(u32::MAX);
-    (i.to_biguint().unwrap() & mask).to_u32().unwrap() as i32
-}
-
 
 impl MalVal {
     pub fn keyword(&self) -> MalRet {
         match self {
-            Str(s) if s.starts_with("\u{29e}") => Ok(Str(s.to_string())),
+            Str(s) if s.starts_with('\u{29e}') => Ok(Str(s.to_string())),
             Str(s) => Ok(Str(format!("\u{29e}{}", s))),
             _ => error("invalid type for keyword"),
         }
     }
 
     pub fn keyword_q(&self) -> bool {
-        match self {
-            Str(s) if s.starts_with("\u{29e}") => true,
-            _ => false,
-        }
+        matches!(self, Str(s) if s.starts_with('\u{29e}'))
     }
 
     pub fn apply(&self, args: MalArgs) -> MalRet {
         match *self {
             Func(f, _) => f(args),
             MalFunc {
-                eval, 
-                ref ast, 
-                ref env, 
+                eval,
+                ref ast,
+                ref env,
                 ref params,
                 ..
             } => {
                 let a = &**ast;
                 let fn_env = env_bind(Some(env.clone()), (**params).clone(), args)?;
                 eval(a.clone(), fn_env)
-            },
+            }
             _ => error("attempt to call non-function"),
         }
     }
@@ -117,7 +94,7 @@ impl MalVal {
     pub fn empty_q(&self) -> MalRet {
         match self {
             List(l, _) | Vector(l, _) => Ok(Bool(l.len() == 0)),
-            Str(s) => Ok(Bool(s.len() == 0)),
+            Str(s) => Ok(Bool(s.is_empty())),
             Nil => Ok(Bool(true)),
             _ => error("invalid type for empty?"),
         }
@@ -125,8 +102,8 @@ impl MalVal {
 
     pub fn count(&self) -> MalRet {
         match self {
-            List(ls,  _) | Vector(ls, _) => Ok(Int(BigInt::new(Sign::Plus, vec![ls.len() as u32]))),
-            Nil => Ok(Int(BigInt::new(Sign::NoSign, vec![0]))),
+            List(ls, _) | Vector(ls, _) => Ok(Int(ls.len() as i64)),
+            Nil => Ok(Int(0)),
             _ => error("invalid type for count"),
         }
     }
@@ -163,9 +140,9 @@ impl MalVal {
 
     pub fn get_meta(&self) -> MalRet {
         match self {
-            List(_, meta) | Vector(_, meta) | Hash(_, meta) => Ok((&**meta).clone()),
-            Func(_, meta) => Ok((&**meta).clone()),
-            MalFunc { meta, .. } => Ok((&**meta).clone()),
+            List(_, meta) | Vector(_, meta) | Hash(_, meta) => Ok((**meta).clone()),
+            Func(_, meta) => Ok((**meta).clone()),
+            MalFunc { meta, .. } => Ok((**meta).clone()),
             _ => error("meta not supported by type"),
         }
     }
@@ -177,7 +154,7 @@ impl MalVal {
             | Hash(_, ref mut meta)
             | Func(_, ref mut meta)
             | MalFunc { ref mut meta, .. } => {
-                *meta = Arc::new((&*new_meta).clone());
+                *meta = Arc::new((*new_meta).clone());
             }
             _ => return error("with-meta not supported by type"),
         };
@@ -191,21 +168,27 @@ impl MalVal {
             Int(_) => "int".to_string(),
             Str(_) => "str".to_string(),
             Sym(_) => "sym".to_string(),
-            List(_,_) => "list".to_string(),
-            Vector(_,_) => "vector".to_string(),
-            Hash(_,_) => "hash".to_string(),
-            Func(_,_) => "func".to_string(),
-            MalFunc {..} => "mal_func".to_string(),
+            List(_, _) => "list".to_string(),
+            Vector(_, _) => "vector".to_string(),
+            Hash(_, _) => "hash".to_string(),
+            Func(_, _) => "func".to_string(),
+            MalFunc { .. } => "mal_func".to_string(),
             Atom(_) => "atom".to_string(),
         }
     }
+}
 
-    pub fn to_string(&self) -> String {
-        match self {
-            Str(s) => s.to_string(),
-            Sym(s) => s.to_string(),
-            _ => panic!()
-        }
+impl fmt::Display for MalVal {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Str(s) => s.to_string(),
+                Sym(s) => s.to_string(),
+                _ => panic!(),
+            }
+        )
     }
 }
 
@@ -262,4 +245,3 @@ pub fn hash_map(kvs: MalArgs) -> MalRet {
     let hm: FnvHashMap<String, MalVal> = FnvHashMap::default();
     _assoc(hm, kvs)
 }
-

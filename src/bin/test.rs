@@ -1,8 +1,8 @@
 use colored::*;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
-use flang::mal::rep;
 use flang::core::env_core;
+use flang::mal::rep;
 
 #[derive(Serialize, Deserialize)]
 struct Test {
@@ -10,11 +10,10 @@ struct Test {
     result: String,
 }
 
-fn main() -> Result<(), ()>
-{
+fn main() -> Result<(), ()> {
     let args: Vec<String> = std::env::args().collect();
-    let tests = std::fs::read_to_string(args[1].clone())
-        .expect("Something went wrong reading the file");
+    let tests =
+        std::fs::read_to_string(args[1].clone()).expect("Something went wrong reading the file");
 
     let mut passed: u32 = 0;
     let tests: Vec<Test> = serde_json::from_str::<Vec<Test>>(&tests).unwrap();
@@ -25,12 +24,11 @@ fn main() -> Result<(), ()>
                 if r == test.result {
                     passed += 1;
                     println!("{}", ".".green());
-                }
-                else {
+                } else {
                     println!("Failed: {} -> {}. Got: {}", test.input, test.result, r);
                     continue;
                 }
-            },
+            }
             Err(err) => {
                 println!("Failed {:?}", err);
                 continue;
@@ -38,15 +36,13 @@ fn main() -> Result<(), ()>
         };
     }
 
-    println!("{}", std::iter::repeat("-").take(80).collect::<String>());
-    let blank = std::iter::repeat(" ").take(77).collect::<String>();
+    println!("{}", "-".repeat(80));
+    let blank = " ".repeat(77);
     println!("{}{}/{}", blank, passed, tests.len());
 
     if passed == tests.len() as u32 {
         Ok(())
-    }
-    else {
+    } else {
         Err(())
     }
 }
-
