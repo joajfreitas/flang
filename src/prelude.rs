@@ -9,15 +9,13 @@ use std::io::Read;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use crate::env::Env;
+use crate::printer::pr_seq;
+use crate::reader::read_str;
 use crate::types::MalErr::{ErrMalVal, ErrString};
 use crate::types::MalVal::{Atom, Bool, Func, Hash, Int, List, MalFunc, Nil, Str, Sym, Vector};
 use crate::types::{atom, hash_map, MalArgs, MalErr, MalRet, MalVal, _assoc, _dissoc};
 use crate::types::{error, func};
-
-use crate::reader::read_str;
-
-use crate::env::{env_new, env_set_from_vector, Env};
-use crate::printer::pr_seq;
 
 macro_rules! fn_t_int_int {
     ($ret:ident, |$x: ident, $y: ident|{$fn:expr}) => {{
@@ -711,8 +709,8 @@ pub fn ns() -> Vec<(&'static str, MalVal)> {
     ]
 }
 
-pub fn env_core() -> Env {
-    let env = env_new(None);
-    env_set_from_vector(&env, ns());
+pub fn prelude() -> Env {
+    let env = Env::new(None);
+    env.set_from_vector(ns());
     env
 }

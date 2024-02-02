@@ -1,4 +1,3 @@
-use colored::*;
 use itertools::Itertools;
 use std::fmt;
 use std::sync::Arc;
@@ -6,7 +5,7 @@ use std::sync::RwLock;
 
 use fnv::FnvHashMap;
 
-use crate::env::{env_bind, Env};
+use crate::env::Env;
 use crate::types::MalErr::ErrString;
 use crate::types::MalVal::{Atom, Bool, Func, Hash, Int, List, MalFunc, Nil, Str, Sym, Vector};
 
@@ -45,13 +44,6 @@ pub fn error(s: &str) -> MalRet {
     Err(ErrString(s.to_string()))
 }
 
-pub fn format_error(e: MalErr) -> String {
-    match e {
-        MalErr::ErrString(s) => format!("{}: {}", "Error".red(), s.clone()),
-        MalErr::ErrMalVal(v) => v.pr_str(true),
-    }
-}
-
 pub fn func(f: fn(MalArgs) -> MalRet) -> MalVal {
     Func(f, Arc::new(Nil))
 }
@@ -61,6 +53,42 @@ pub fn atom(mv: &MalVal) -> MalVal {
 }
 
 impl MalVal {
+    pub fn nil() -> Self {
+        MalVal::Nil
+    }
+
+    pub fn boolean(b: bool) -> Self {
+        MalVal::Bool(b)
+    }
+
+    pub fn int(i: i64) -> Self {
+        MalVal::Int(i)
+    }
+
+    pub fn str(s: &str) -> Self {
+        MalVal::Str(s.to_string())
+    }
+
+    pub fn sym(s: &str) -> Self {
+        MalVal::Sym(s.to_string())
+    }
+
+    pub fn list(l: &[MalVal]) -> Self {
+        MalVal::List(Arc::new(l.to_vec()), Arc::new(MalVal::nil()))
+    }
+
+    pub fn vector(l: &[MalVal]) -> Self {
+        MalVal::Vector(Arc::new(l.to_vec()), Arc::new(MalVal::nil()))
+    }
+
+    pub fn hash(h: &FnvHashMap<String, MalVal>) -> MalVal {
+        MalVal::Hash(Arc::new(h.clone()), Arc::new(MalVal::nil()))
+    }
+
+    pub fn func(f: fn(MalArgs) -> MalRet) -> MalVal {
+        MalVal::Func(f, Arc::new(MalVal::nil()))
+    }
+
     pub fn keyword(&self) -> MalRet {
         match self {
             Str(s) if s.starts_with('\u{29e}') => Ok(Str(s.to_string())),
@@ -84,7 +112,7 @@ impl MalVal {
                 ..
             } => {
                 let a = &**ast;
-                let fn_env = env_bind(Some(env.clone()), (**params).clone(), args)?;
+                let fn_env = Env::bind(Some(env.clone()), (**params).clone(), args)?;
                 eval(a.clone(), fn_env)
             }
             _ => error("attempt to call non-function"),
