@@ -1,9 +1,9 @@
 use itertools::Itertools;
+use std::cmp::Ordering;
+use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
 use std::sync::RwLock;
-
-use fnv::FnvHashMap;
 
 use crate::env::Env;
 use crate::types::MalErr::ErrString;
@@ -18,7 +18,7 @@ pub enum MalVal {
     Sym(String),
     List(Arc<Vec<MalVal>>, Arc<MalVal>),
     Vector(Arc<Vec<MalVal>>, Arc<MalVal>),
-    Hash(Arc<FnvHashMap<String, MalVal>>, Arc<MalVal>),
+    Hash(Arc<HashMap<String, MalVal>>, Arc<MalVal>),
     Func(fn(MalArgs) -> MalRet, Arc<MalVal>),
     MalFunc {
         eval: fn(ast: MalVal, env: Env) -> MalRet,
@@ -81,7 +81,7 @@ impl MalVal {
         MalVal::Vector(Arc::new(l.to_vec()), Arc::new(MalVal::nil()))
     }
 
-    pub fn hash(h: &FnvHashMap<String, MalVal>) -> MalVal {
+    pub fn hash(h: &HashMap<String, MalVal>) -> MalVal {
         MalVal::Hash(Arc::new(h.clone()), Arc::new(MalVal::nil()))
     }
 
@@ -239,7 +239,22 @@ impl PartialEq for MalVal {
     }
 }
 
-pub fn _assoc(mut hm: FnvHashMap<String, MalVal>, kvs: MalArgs) -> MalRet {
+impl Eq for MalVal {}
+
+impl PartialOrd for MalVal {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        match (self, other) {
+            (Nil, Nil) => None,
+            (Bool(ref a), Bool(ref b)) => Some(a.cmp(b)),
+            (Int(ref a), Int(ref b)) => Some(a.cmp(b)),
+            (Str(ref a), Str(ref b)) => Some(a.cmp(b)),
+            (Sym(ref a), Sym(ref b)) => Some(a.cmp(b)),
+            _ => None,
+        }
+    }
+}
+
+pub fn _assoc(mut hm: HashMap<String, MalVal>, kvs: MalArgs) -> MalRet {
     if kvs.len() % 2 != 0 {
         return error("odd number of elements");
     }
@@ -254,7 +269,7 @@ pub fn _assoc(mut hm: FnvHashMap<String, MalVal>, kvs: MalArgs) -> MalRet {
     Ok(Hash(Arc::new(hm), Arc::new(Nil)))
 }
 
-pub fn _dissoc(mut hm: FnvHashMap<String, MalVal>, ks: MalArgs) -> MalRet {
+pub fn _dissoc(mut hm: HashMap<String, MalVal>, ks: MalArgs) -> MalRet {
     for k in ks.iter() {
         match k {
             Str(ref s) => {
@@ -270,6 +285,6 @@ pub fn _dissoc(mut hm: FnvHashMap<String, MalVal>, ks: MalArgs) -> MalRet {
 }
 
 pub fn hash_map(kvs: MalArgs) -> MalRet {
-    let hm: FnvHashMap<String, MalVal> = FnvHashMap::default();
+    let hm: HashMap<String, MalVal> = HashMap::default();
     _assoc(hm, kvs)
 }

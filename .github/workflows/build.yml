@@ -17,9 +17,11 @@ jobs:
     - uses: Swatinem/rust-cache@v1
     - name: Version
       run: rustc --version
-    - name: Build
+    - name: Build lib
       run: cargo rustc --lib --verbose -- -D warnings
-       | cargo rustc --bin flang --verbose -- -D warnings
+    - name: Build bin
+      run: cargo rustc --bin flang-bin --verbose -- -D warnings
+      working-directory: flang-bin/
 
   clippy:
     runs-on: ubuntu-latest
@@ -29,7 +31,7 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: --all-features -- -D warnings
+          args: --all --all-features -- -D warnings
 
   test:
     runs-on: ubuntu-latest
@@ -38,11 +40,11 @@ jobs:
     - uses: actions/checkout@v2
     - uses: Swatinem/rust-cache@v1
     - name: Unit tests
-      run: cargo test
+      run: cargo test --all
 
   format-check:
       runs-on: ubuntu-latest
       steps:
         - uses: actions/checkout@v2
         - name: Run rustfmt
-          run: cargo fmt
+          run: cargo fmt --all

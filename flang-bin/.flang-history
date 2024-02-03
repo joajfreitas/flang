@@ -1,0 +1,17 @@
+{:a 1 :b 2}
+(let a {:a 1 :b 2})
+(let* a {:a 1 :b 2})
+(def! a {:a 1 :b 2})
+a
+(assoc a "c" 3)
+a
+(def! a {a 1 b 2})
+(def! a {"a" 1 "b" 2})
+(def! b (assoc a "c" 3))
+b
+(get b "c")
+(+ 1 2)
+(+ 1 2 3)
+(+ 1 2 3 4)
+(+ 1 2 3 4 5)
+(sum '(1 2 3))

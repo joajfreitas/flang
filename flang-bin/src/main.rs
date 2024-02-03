@@ -30,8 +30,7 @@ fn prelude(repl_env: &Env, args: Args) {
     repl_env.sets("*ARGV*", MalVal::list(&args));
 
     let _ = rep(
-        "(def! load-file (fn* (f) (eval (read-string (str \"(do \" (slurp f)\"\nnil)\")))))"
-            ,
+        "(def! load-file (fn* (f) (eval (read-string (str \"(do \" (slurp f)\"\nnil)\")))))",
         repl_env,
     );
 
@@ -67,10 +66,7 @@ fn repl() -> Result<(), std::io::Error> {
     let args = std::env::args();
     prelude(&repl_env, args);
 
-    let _ = rep(
-        "(println (str \"Mal [\" *host-language* \"]\"))",
-        &repl_env,
-    );
+    let _ = rep("(println (str \"Mal [\" *host-language* \"]\"))", &repl_env);
 
     let mut rl = Editor::<()>::new();
     if rl.load_history(".flang-history").is_err() {

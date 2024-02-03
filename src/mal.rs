@@ -1,5 +1,5 @@
-use fnv::FnvHashMap;
 use itertools::Itertools;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::env::Env;
@@ -106,7 +106,7 @@ fn eval_ast(ast: &MalVal, env: &Env) -> MalRet {
             Ok(vector!(lst))
         }
         Hash(h, _) => {
-            let mut hm: FnvHashMap<String, MalVal> = FnvHashMap::default();
+            let mut hm: HashMap<String, MalVal> = HashMap::default();
             for (k, v) in h.iter() {
                 hm.insert(k.to_string(), eval(v.clone(), env.clone())?);
             }

@@ -2,21 +2,20 @@ use std::fmt;
 use std::sync::Arc;
 use std::sync::RwLock;
 
-//use colored::*;
+use std::collections::HashMap;
 
-use fnv::FnvHashMap;
-
-//use crate::types::MalErr::ErrString;
 use crate::types::MalErr::ErrString;
 use crate::types::MalVal::{List, Nil, Sym, Vector};
 use crate::types::{error, MalArgs, MalErr, MalRet, MalVal};
 
 #[derive(Debug)]
 pub struct EnvStruct {
-    pub data: RwLock<FnvHashMap<String, MalVal>>,
+    pub data: RwLock<HashMap<String, MalVal>>,
     pub outer: Option<Env>,
 }
 
+/// Env holds the execution environment of the interpreter.
+/// Each function is executed in its own environment. The outer pointer
 #[derive(Clone)]
 pub struct Env(Arc<EnvStruct>);
 
@@ -29,7 +28,7 @@ impl fmt::Debug for Env {
 impl Env {
     pub fn new(outer: Option<Env>) -> Self {
         Env(Arc::new(EnvStruct {
-            data: RwLock::new(FnvHashMap::default()),
+            data: RwLock::new(HashMap::default()),
             outer,
         }))
     }
@@ -59,7 +58,7 @@ impl Env {
         &self.0.outer
     }
 
-    pub fn data(&self) -> &RwLock<FnvHashMap<String, MalVal>> {
+    fn data(&self) -> &RwLock<HashMap<String, MalVal>> {
         &self.0.data
     }
 

@@ -1,7 +1,6 @@
-use dyn_fmt::AsStrFormatExt;
+//use dyn_fmt::AsStrFormatExt;
 use itertools::Itertools;
 use rand::{random, thread_rng, Rng};
-use ureq::Error;
 
 use std::convert::TryInto;
 use std::fs::File;
@@ -395,22 +394,24 @@ fn replace(a: MalArgs) -> MalRet {
 }
 
 fn format(args: MalArgs) -> MalRet {
-    let mut strs: Vec<&str> = Vec::new();
+    //let mut strs: Vec<&str> = Vec::new();
     let fmt = match &args[0] {
         Str(s) => s,
         _ => return error("format: 1st argument is not a string"),
     };
 
-    for arg in args.iter().skip(1) {
-        match arg {
-            Str(s) => strs.push(s),
-            Sym(s) => strs.push(s),
-            Nil => strs.push("Nil"),
-            _ => return error(&format!("format: argument is not a string {:?}", arg)),
-        };
-    }
+    Ok(Str(fmt.clone()))
 
-    Ok(Str(fmt.format(strs)))
+    //for arg in args.iter().skip(1) {
+    //    match arg {
+    //        Str(s) => strs.push(s),
+    //        Sym(s) => strs.push(s),
+    //        Nil => strs.push("Nil"),
+    //        _ => return error(&format!("format: argument is not a string {:?}", arg)),
+    //    };
+    //}
+
+    //Ok(Str(fmt.format(strs)))
 }
 
 fn join(a: MalArgs) -> MalRet {
@@ -491,19 +492,6 @@ pub fn path_join(a: MalArgs) -> MalRet {
     {
         Ok(s) => Ok(Str(s.join("/"))),
         Err(err) => Err(err),
-    }
-}
-
-pub fn curl_get(a: MalArgs) -> MalRet {
-    let s = match &a[0] {
-        Str(s) => s,
-        _ => return error("curl::get received something that is not a string"),
-    };
-
-    match ureq::get(s).call() {
-        Ok(response) => Ok(Str(response.into_string().unwrap())),
-        Err(Error::Status(code, _response)) => error(&format!("curl::get {}", code)),
-        Err(_) => error("curl::get: error acessing remote resource."),
     }
 }
 
@@ -700,7 +688,6 @@ pub fn ns() -> Vec<(&'static str, MalVal)> {
         ("replace", func(replace)),
         ("cat", func(cat)),
         ("join", func(path_join)),
-        ("get", func(curl_get)),
         ("dedup", func(dedup)),
         ("flatten", func(flatten)),
         ("random", func(mal_random)),
