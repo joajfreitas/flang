@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
-use std::sync::RwLock;
+use std::cell::RefCell;
 
 use crate::env::Env;
 use crate::types::MalErr::ErrString;
@@ -28,7 +28,7 @@ pub enum MalVal {
         is_macro: bool,
         meta: Rc<MalVal>,
     },
-    Atom(Rc<RwLock<MalVal>>),
+    Atom(Rc<RefCell<MalVal>>),
 }
 
 #[derive(Debug)]
@@ -49,7 +49,7 @@ pub fn func(f: fn(MalArgs) -> MalRet) -> MalVal {
 }
 
 pub fn atom(mv: &MalVal) -> MalVal {
-    Atom(Rc::new(RwLock::new(mv.clone())))
+    Atom(Rc::new(RefCell::new(mv.clone())))
 }
 
 impl MalVal {
@@ -138,7 +138,7 @@ impl MalVal {
 
     pub fn deref(&self) -> MalRet {
         match self {
-            Atom(a) => Ok(a.read().unwrap().clone()),
+            Atom(a) => Ok(a.borrow().clone()),
             _ => error("attempt to deref a non-Atom"),
         }
     }
@@ -146,7 +146,7 @@ impl MalVal {
     pub fn reset_bang(&self, new: &MalVal) -> MalRet {
         match self {
             Atom(a) => {
-                *a.write().unwrap() = new.clone();
+                *a.borrow_mut() = new.clone();
                 Ok(new.clone())
             }
             _ => error("attempt to reset! a non-Atom"),
@@ -158,9 +158,9 @@ impl MalVal {
             Atom(a) => {
                 let f = &args[0];
                 let mut fargs = args[1..].to_vec();
-                fargs.insert(0, a.read().unwrap().clone());
-                *a.write().unwrap() = f.apply(fargs)?;
-                Ok(a.read().unwrap().clone())
+                fargs.insert(0, a.borrow().clone());
+                *a.borrow_mut() = f.apply(fargs)?;
+                Ok(a.borrow().clone())
             }
             _ => error("attempt to swap! a non-Atom"),
         }

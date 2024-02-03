@@ -46,7 +46,7 @@ impl MalVal {
             }
             Func(f, _) => format!("#{:?}", f),
             MalFunc { .. } => "mal function".to_string(),
-            Atom(a) => format!("(atom {})", a.read().unwrap().pr_str(print_readably)),
+            Atom(a) => format!("(atom {})", a.borrow().pr_str(print_readably)),
         }
     }
 }

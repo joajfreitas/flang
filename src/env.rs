@@ -1,6 +1,6 @@
 use std::fmt;
 use std::rc::Rc;
-use std::sync::RwLock;
+use std::cell::{RefCell, RefMut};
 
 use std::collections::HashMap;
 
@@ -10,7 +10,7 @@ use crate::types::{error, MalArgs, MalErr, MalRet, MalVal};
 
 #[derive(Debug)]
 pub struct EnvStruct {
-    pub data: RwLock<HashMap<String, MalVal>>,
+    pub data: RefCell<HashMap<String, MalVal>>,
     pub outer: Option<Env>,
 }
 
@@ -27,7 +27,7 @@ impl fmt::Debug for Env {
 impl Env {
     pub fn new(outer: Option<Env>) -> Self {
         Env(Rc::new(EnvStruct {
-            data: RwLock::new(HashMap::default()),
+            data: RefCell::new(HashMap::default()),
             outer,
         }))
     }
@@ -57,8 +57,8 @@ impl Env {
         &self.0.outer
     }
 
-    fn data(&self) -> &RwLock<HashMap<String, MalVal>> {
-        &self.0.data
+    fn data(&self) -> RefMut<HashMap<String, MalVal>> {
+        self.0.data.borrow_mut()
     }
 
     pub fn set(&self, key: MalVal, value: MalVal) -> MalRet {
@@ -71,15 +71,12 @@ impl Env {
             }
         };
 
-        let mut data = self.0.data.write().unwrap();
-        data.insert(s, value.clone());
+        self.data().insert(s, value.clone());
         Ok(value)
     }
 
     pub fn sets(&self, key: &str, value: MalVal) {
-        let mut data = self.data().write().unwrap();
-
-        data.insert(key.to_string(), value.clone());
+        self.data().insert(key.to_string(), value.clone());
     }
 
     pub fn set_from_vector(&self, vs: Vec<(&'static str, MalVal)>) {
@@ -90,8 +87,8 @@ impl Env {
 
     pub fn find(&self, key: &str) -> Option<Env> {
         match (
-            self.0.data.read().unwrap().contains_key(key),
-            self.0.outer.clone(),
+            self.data().contains_key(key),
+            self.outer().clone(),
         ) {
             (true, _) => Some(self.clone()),
             (false, Some(o)) => o.find(key),
@@ -107,10 +104,7 @@ impl Env {
 
         match self.find(key) {
             Some(e) => Ok(e
-                .0
-                .data
-                .read()
-                .unwrap()
+                .data()
                 .get(key)
                 .ok_or(ErrString(format!("'{}' not found", key)))?
                 .clone()),
