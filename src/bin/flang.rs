@@ -31,7 +31,7 @@ fn prelude(repl_env: &Env, args: Args) {
 
     let _ = rep(
         "(def! load-file (fn* (f) (eval (read-string (str \"(do \" (slurp f)\"\nnil)\")))))"
-            .to_string(),
+            ,
         repl_env,
     );
 
@@ -54,12 +54,11 @@ fn prelude(repl_env: &Env, args: Args) {
 			)\
 		)\
 	)\
-)"
-        .to_string(),
+)",
         repl_env,
     );
 
-    let _ = rep("(def! *host-language* \"flang\")".to_string(), repl_env);
+    let _ = rep("(def! *host-language* \"flang\")", repl_env);
 }
 
 fn repl() -> Result<(), std::io::Error> {
@@ -69,7 +68,7 @@ fn repl() -> Result<(), std::io::Error> {
     prelude(&repl_env, args);
 
     let _ = rep(
-        "(println (str \"Mal [\" *host-language* \"]\"))".to_string(),
+        "(println (str \"Mal [\" *host-language* \"]\"))",
         &repl_env,
     );
 
@@ -85,7 +84,7 @@ fn repl() -> Result<(), std::io::Error> {
             Ok(line) => {
                 rl.add_history_entry(line.as_str());
                 rl.save_history(".flang-history").unwrap();
-                match rep(line, &repl_env) {
+                match rep(&line, &repl_env) {
                     Ok(out) => {
                         prompt = "user> ".to_string();
                         println!("{}", out);
@@ -114,7 +113,7 @@ fn file(path: &str) -> Result<(), std::io::Error> {
     prelude(&repl_env, std::env::args());
 
     let file = fs::read_to_string(path)?;
-    println!("{:?}", rep(file, &repl_env));
+    println!("{:?}", rep(&file, &repl_env));
     Ok(())
 }
 

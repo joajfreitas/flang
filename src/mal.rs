@@ -297,8 +297,8 @@ fn print(ast: &MalVal) -> String {
     ast.pr_str(false)
 }
 
-pub fn rep(line: String, env: &Env) -> Result<String, MalErr> {
-    let ast = match read(&line) {
+pub fn rep(line: &str, env: &Env) -> Result<String, MalErr> {
+    let ast = match read(line) {
         Ok(a) => a,
         Err(err) => return Err(err),
     };

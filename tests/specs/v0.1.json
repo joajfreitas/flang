@@ -1,0 +1,53 @@
+{
+  "name": "v0_1",
+  "tests": [
+	{
+    "id": 0,
+    "name": "nil",
+		"input": "nil",
+		"output": "nil"
+	},
+	{
+    "id": 1,
+    "name": "true",
+		"input": "true",
+		"output": "true"
+	},
+	{
+    "id": 2,
+    "name": "false",
+		"input": "false",
+		"output": "false"
+	},
+	{
+    "id": 3,
+    "name": "string",
+		"input": "\"hello world\"",
+		"output": "hello world"
+	},
+	{
+      "id": 4,
+      "name": "list",
+		"input": "'(1 2 3)",
+		"output": "(1 2 3)"
+	},
+	{
+      "id": 5,
+      "name": "vec",
+		"input": "[1 2 3]",
+		"output": "[1 2 3]"
+	},
+	{
+      "id": 6,
+      "name": "hash",
+		"input": "{\"a\" 1 \"b\" 2}",
+		"output": "{a 1 b 2}"
+	},
+	{
+      "id": 7,
+      "name": "function_application",
+		"input": "(+ 1 1)",
+		"output": "2"
+	}
+]
+}
