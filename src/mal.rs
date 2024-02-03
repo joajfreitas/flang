@@ -1,6 +1,6 @@
 use itertools::Itertools;
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::rc::Rc;
 
 use crate::env::Env;
 use crate::reader::read_str;
@@ -9,40 +9,20 @@ use crate::types::MalErr::{ErrMalVal, ErrString};
 use crate::types::MalVal::{Bool, Func, Hash, List, MalFunc, Nil, Str, Sym, Vector};
 use crate::types::{MalArgs, MalErr, MalRet, MalVal};
 
-macro_rules! list {
-  ($seq:expr) => {{
-    List(Arc::new($seq),Arc::new(Nil))
-  }};
-  [$($args:expr),*] => {{
-    let v: Vec<MalVal> = vec![$($args),*];
-    List(Arc::new(v),Arc::new(Nil))
-  }}
-}
-
-macro_rules! vector {
-  ($seq:expr) => {{
-    Vector(Arc::new($seq),Arc::new(Nil))
-  }};
-  [$($args:expr),*] => {{
-    let v: Vec<MalVal> = vec![$($args),*];
-    Vector(Arc::new(v),Arc::new(Nil))
-  }}
-}
-
 fn qq_iter(elts: &MalArgs) -> MalVal {
-    let mut acc = list![];
+    let mut acc = MalVal::list(&vec![]);
     for elt in elts.iter().rev() {
         if let List(v, _) = elt {
             if v.len() == 2 {
                 if let Sym(ref s) = v[0] {
                     if s == "splice-unquote" {
-                        acc = list![Sym("concat".to_string()), v[1].clone(), acc];
+                        acc = MalVal::list(&vec![Sym("concat".to_string()), v[1].clone(), acc]);
                         continue;
                     }
                 }
             }
         }
-        acc = list![Sym("cons".to_string()), quasiquote(elt), acc];
+        acc = MalVal::list(&vec![Sym("cons".to_string()), quasiquote(elt), acc]);
     }
     acc
 }
@@ -59,8 +39,8 @@ fn quasiquote(ast: &MalVal) -> MalVal {
             }
             qq_iter(v)
         }
-        Vector(v, _) => list![Sym("vec".to_string()), qq_iter(v)],
-        Hash(_, _) | Sym(_) => list![Sym("quote".to_string()), ast.clone()],
+        Vector(v, _) => MalVal::list(&vec![Sym("vec".to_string()), qq_iter(v)]),
+        Hash(_, _) | Sym(_) => MalVal::list(&vec![Sym("quote".to_string()), ast.clone()]),
         _ => ast.clone(),
     }
 }
@@ -96,21 +76,21 @@ fn eval_ast(ast: &MalVal, env: &Env) -> MalRet {
             for e in l.iter() {
                 lst.push(eval(e.clone(), env.clone())?);
             }
-            Ok(list!(lst))
+            Ok(MalVal::list(&lst))
         }
         Vector(v, _) => {
             let mut lst: Vec<MalVal> = vec![];
             for e in v.iter() {
                 lst.push(eval(e.clone(), env.clone())?);
             }
-            Ok(vector!(lst))
+            Ok(MalVal::vector(&lst))
         }
         Hash(h, _) => {
             let mut hm: HashMap<String, MalVal> = HashMap::default();
             for (k, v) in h.iter() {
                 hm.insert(k.to_string(), eval(v.clone(), env.clone())?);
             }
-            Ok(Hash(Arc::new(hm), Arc::new(Nil)))
+            Ok(Hash(Rc::new(hm), Rc::new(Nil)))
         }
         _ => Ok(ast.clone()),
     }
@@ -152,7 +132,7 @@ fn eval(mut ast: MalVal, mut env: Env) -> MalRet {
                                 env: env.clone(),
                                 params,
                                 is_macro: true,
-                                meta: Arc::new(Nil),
+                                meta: Rc::new(Nil),
                             };
                             env.set(l[1].clone(), f)
                         }
@@ -204,7 +184,7 @@ fn eval(mut ast: MalVal, mut env: Env) -> MalRet {
                                 List(c, _) => {
                                     let catch_env = Env::bind(
                                         Some(env.clone()),
-                                        list!(vec![c[1].clone()]),
+                                        MalVal::list(&vec![c[1].clone()]),
                                         vec![exc],
                                     )?;
                                     eval(c[2].clone(), catch_env)
@@ -214,7 +194,7 @@ fn eval(mut ast: MalVal, mut env: Env) -> MalRet {
                         }
                         res => res,
                     },
-                    Sym(ref a0) if a0 == "do" => match eval_ast(&list!(l[1..].to_vec()), &env)? {
+                    Sym(ref a0) if a0 == "do" => match eval_ast(&MalVal::list(&l[1..].to_vec()), &env)? {
                         List(r, _) => {
                             ast = r.last().unwrap_or(&Nil).clone();
                             continue 'tco;
@@ -240,11 +220,11 @@ fn eval(mut ast: MalVal, mut env: Env) -> MalRet {
                         let (a1, a2) = (l[1].clone(), l[2].clone());
                         Ok(MalFunc {
                             eval,
-                            ast: Arc::new(a2),
+                            ast: Rc::new(a2),
                             env: env.clone(),
-                            params: Arc::new(a1),
+                            params: Rc::new(a1),
                             is_macro: false,
-                            meta: Arc::new(Nil),
+                            meta: Rc::new(Nil),
                         })
                     }
                     Sym(ref a0sym) if a0sym == "eval" => {

@@ -5,7 +5,6 @@ use rand::{random, thread_rng, Rng};
 use std::convert::TryInto;
 use std::fs::File;
 use std::io::Read;
-use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::env::Env;
@@ -106,9 +105,9 @@ fn cdr(a: MalArgs) -> MalRet {
             if v.len() == 0 {
                 return error("You cannot ask for the cdr of an empty list.");
             }
-            Ok(list!(v[1..].to_vec()))
+            Ok(MalVal::list(&v[1..].to_vec()))
         },
-        Nil => Ok(list!()),
+        Nil => Ok(MalVal::list(&vec![])),
         _ => error("The Law of Cdr:\nThe primitive cdr is defined only for non-empty lists. The cdr of any non-empty list is always another list."),
     }
 }
@@ -118,7 +117,7 @@ fn cons(a: MalArgs) -> MalRet {
         List(v, _) | Vector(v, _) => {
             let mut nv = vec![a[0].clone()];
             nv.extend_from_slice(v);
-            Ok(list!(nv.to_vec()))
+            Ok(MalVal::list(&nv.to_vec()))
         }
         _ => error("The Law of Cons:\nThe primitive cons takes two arguments. The second argument to cons must be a list. The result is a list."),
     }
@@ -134,12 +133,12 @@ fn concat(a: MalArgs) -> MalRet {
         }
     }
 
-    Ok(list!(nv.to_vec()))
+    Ok(MalVal::list(&nv.to_vec()))
 }
 
 fn vec(a: MalArgs) -> MalRet {
     match a[0] {
-        List(ref l, _) => Ok(vector![l.to_vec()]),
+        List(ref l, _) => Ok(MalVal::vector(&l.to_vec())),
         Vector(_, _) => Ok(a[0].clone()),
         _ => error("Calling vec with something that is not a vector or a list"),
     }
@@ -176,7 +175,7 @@ fn map(a: MalArgs) -> MalRet {
             for mv in v.iter() {
                 res.push(a[0].apply(vec![mv.clone()])?)
             }
-            Ok(list!(res))
+            Ok(MalVal::list(&res))
         }
         _ => error("map: second argument is not a sequence"),
     }
@@ -192,7 +191,7 @@ fn filter(a: MalArgs) -> MalRet {
                     _ => continue,
                 };
             }
-            Ok(list!(res))
+            Ok(MalVal::list(&res))
         }
         _ => error("map: second argument is not a sequence"),
     }
@@ -259,14 +258,14 @@ fn contains_q(a: MalArgs) -> MalRet {
 
 fn keys(a: MalArgs) -> MalRet {
     match a[0] {
-        Hash(ref hm, _) => Ok(list!(hm.keys().map(|k| { Str(k.to_string()) }).collect())),
+        Hash(ref hm, _) => Ok(MalVal::list(&hm.keys().map(|k| { Str(k.to_string()) }).collect::<Vec<MalVal>>())),
         _ => error("keys requires Hash Map"),
     }
 }
 
 fn vals(a: MalArgs) -> MalRet {
     match a[0] {
-        Hash(ref hm, _) => Ok(list!(hm.values().cloned().collect())),
+        Hash(ref hm, _) => Ok(MalVal::list(&hm.values().cloned().collect::<Vec<MalVal>>())),
         _ => error("keys requires Hash Map"),
     }
 }
@@ -285,10 +284,11 @@ fn time_ms(_args: MalArgs) -> MalRet {
 fn seq(a: MalArgs) -> MalRet {
     match a[0] {
         List(ref v, _) | Vector(ref v, _) if v.len() == 0 => Ok(Nil),
-        List(ref v, _) | Vector(ref v, _) => Ok(list!(v.to_vec())),
+        List(ref v, _) | Vector(ref v, _) => Ok(MalVal::list(&v.to_vec())),
         Str(ref s) if s.is_empty() => Ok(Nil),
         Str(ref s) if !a[0].keyword_q() => {
-            Ok(list!(s.chars().map(|c| { Str(c.to_string()) }).collect()))
+            let v: Vec<MalVal> = s.chars().map(|c| { Str(c.to_string()) }).collect();
+            Ok(MalVal::list(&v))
         }
         Nil => Ok(Nil),
         _ => error("seq: called with non-seq"),
@@ -299,19 +299,19 @@ fn conj(a: MalArgs) -> MalRet {
     match a[0] {
         List(ref v, _) => {
             let sl = a[1..].iter().rev().cloned().collect::<Vec<MalVal>>();
-            Ok(list!([&sl[..], v].concat()))
+            Ok(MalVal::list(&[&sl[..], v].concat()))
         }
-        Vector(ref v, _) => Ok(vector!([v, &a[1..]].concat())),
+        Vector(ref v, _) => Ok(MalVal::vector(&[v, &a[1..]].concat())),
         _ => error("conj: called with non-seq"),
     }
 }
 
 fn split(a: MalArgs) -> MalRet {
     match (a[0].clone(), a[1].clone()) {
-        (Str(sp), Str(st)) => Ok(vector![st
+        (Str(sp), Str(st)) => Ok(MalVal::vector(&st
             .split(&sp[..])
             .map(|a| Str(a.to_string()))
-            .collect::<Vec<MalVal>>()]),
+            .collect::<Vec<MalVal>>())),
         _ => error("split: arguments are not strings"),
     }
 }
@@ -332,9 +332,9 @@ fn combinations(a: MalArgs) -> MalRet {
                 for b in c {
                     aux.push(b.clone());
                 }
-                r.push(vector!(aux.to_vec()));
+                r.push(MalVal::vector(&aux.to_vec()));
             }
-            Ok(vector!(r.to_vec()))
+            Ok(MalVal::vector(&r.to_vec()))
         }
         _ => error("combination: Wrong set of parameters"),
     }
@@ -505,7 +505,7 @@ pub fn dedup(a: MalArgs) -> MalRet {
                     ys.push(v.clone());
                 }
             }
-            Ok(vector![ys])
+            Ok(MalVal::vector(&ys))
         }
         _ => error("list::dedup received something that is not a sequence"),
     }
@@ -530,7 +530,7 @@ pub fn flatten(a: MalArgs) -> MalRet {
         _ => {}
     };
 
-    Ok(vector![xs])
+    Ok(MalVal::vector(&xs))
 }
 
 pub fn mal_random(_a: MalArgs) -> MalRet {
@@ -589,7 +589,7 @@ pub fn ns() -> Vec<(&'static str, MalVal)> {
         ("nor", func(fn_t_bool_bool!(Bool, |i, j| { !(i || j) }))),
         ("xor", func(fn_t_bool_bool!(Bool, |i, j| { i ^ j }))),
         ("xnor", func(fn_t_bool_bool!(Bool, |i, j| { !(i ^ j) }))),
-        ("list", func(|a| Ok(list!(a)))),
+        ("list", func(|a| Ok(MalVal::list(&a)))),
         ("list?", func(fn_is_type!(List(_, _)))),
         ("empty?", func(|a| a[0].empty_q())),
         ("!empty?", func(not_empty)),
@@ -648,7 +648,7 @@ pub fn ns() -> Vec<(&'static str, MalVal)> {
             "keyword?",
             func(fn_is_type!(Str(ref s) if s.starts_with('\u{29e}'))),
         ),
-        ("vector", func(|a| Ok(vector!(a)))),
+        ("vector", func(|a| Ok(MalVal::vector(&a)))),
         ("vector?", func(fn_is_type!(Vector(_, _)))),
         ("sequential?", func(fn_is_type!(List(_, _), Vector(_, _)))),
         ("hash-map", func(hash_map)),

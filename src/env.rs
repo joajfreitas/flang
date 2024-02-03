@@ -5,7 +5,7 @@ use std::sync::RwLock;
 use std::collections::HashMap;
 
 use crate::types::MalErr::ErrString;
-use crate::types::MalVal::{List, Nil, Sym, Vector};
+use crate::types::MalVal::{List, Sym, Vector};
 use crate::types::{error, MalArgs, MalErr, MalRet, MalVal};
 
 #[derive(Debug)]
@@ -15,7 +15,6 @@ pub struct EnvStruct {
 }
 
 /// Env holds the execution environment of the interpreter.
-/// Each function is executed in its own environment. The outer pointer
 #[derive(Clone)]
 pub struct Env(Arc<EnvStruct>);
 
@@ -40,7 +39,7 @@ impl Env {
                 for (i, b) in binds.iter().enumerate() {
                     match b {
                         Sym(s) if s == "&" => {
-                            env.set(binds[i + 1].clone(), list!(exprs[i..].to_vec()))?;
+                            env.set(binds[i + 1].clone(), MalVal::list(&exprs[i..].to_vec()))?;
                             break;
                         }
                         _ => {
