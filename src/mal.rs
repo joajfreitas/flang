@@ -9,7 +9,6 @@ use crate::types::MalErr::{ErrMalVal, ErrString};
 use crate::types::MalVal::{Bool, Func, Hash, List, MalFunc, Nil, Str, Sym, Vector};
 use crate::types::{MalArgs, MalErr, MalRet, MalVal};
 
-#[macro_export]
 macro_rules! list {
   ($seq:expr) => {{
     List(Arc::new($seq),Arc::new(Nil))
@@ -20,7 +19,6 @@ macro_rules! list {
   }}
 }
 
-#[macro_export]
 macro_rules! vector {
   ($seq:expr) => {{
     Vector(Arc::new($seq),Arc::new(Nil))
