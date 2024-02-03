@@ -57,29 +57,29 @@ fn read_form(reader: &mut Reader) -> MalRet {
     match &token[..] {
         "'" => {
             let _ = reader.next();
-            Ok(MalVal::list(&vec![Sym("quote".to_string()), read_form(reader)?]))
+            Ok(MalVal::list(&[Sym("quote".to_string()), read_form(reader)?]))
         }
         "`" => {
             let _ = reader.next();
-            Ok(MalVal::list(&vec![Sym("quasiquote".to_string()), read_form(reader)?]))
+            Ok(MalVal::list(&[Sym("quasiquote".to_string()), read_form(reader)?]))
         }
         "~" => {
             let _ = reader.next();
-            Ok(MalVal::list(&vec![Sym("unquote".to_string()), read_form(reader)?]))
+            Ok(MalVal::list(&[Sym("unquote".to_string()), read_form(reader)?]))
         }
         "~@" => {
             let _ = reader.next();
-            Ok(MalVal::list(&vec![Sym("splice-unquote".to_string()), read_form(reader)?]))
+            Ok(MalVal::list(&[Sym("splice-unquote".to_string()), read_form(reader)?]))
         }
 
         "@" => {
             let _ = reader.next();
-            Ok(MalVal::list(&vec![Sym("deref".to_string()), read_form(reader)?]))
+            Ok(MalVal::list(&[Sym("deref".to_string()), read_form(reader)?]))
         }
         "^" => {
             let _ = reader.next();
             let meta = read_form(reader)?;
-            Ok(MalVal::list(&vec![
+            Ok(MalVal::list(&[
                 Sym("with-meta".to_string()),
                 read_form(reader)?,
                 meta

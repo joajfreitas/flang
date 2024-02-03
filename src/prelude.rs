@@ -105,9 +105,9 @@ fn cdr(a: MalArgs) -> MalRet {
             if v.len() == 0 {
                 return error("You cannot ask for the cdr of an empty list.");
             }
-            Ok(MalVal::list(&v[1..].to_vec()))
+            Ok(MalVal::list(&v[1..]))
         },
-        Nil => Ok(MalVal::list(&vec![])),
+        Nil => Ok(MalVal::list(&[])),
         _ => error("The Law of Cdr:\nThe primitive cdr is defined only for non-empty lists. The cdr of any non-empty list is always another list."),
     }
 }

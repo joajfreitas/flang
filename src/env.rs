@@ -39,7 +39,7 @@ impl Env {
                 for (i, b) in binds.iter().enumerate() {
                     match b {
                         Sym(s) if s == "&" => {
-                            env.set(binds[i + 1].clone(), MalVal::list(&exprs[i..].to_vec()))?;
+                            env.set(binds[i + 1].clone(), MalVal::list(&exprs[i..]))?;
                             break;
                         }
                         _ => {
