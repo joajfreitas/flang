@@ -1,5 +1,5 @@
 use std::fmt;
-use std::sync::Arc;
+use std::rc::Rc;
 use std::sync::RwLock;
 
 use std::collections::HashMap;
@@ -16,7 +16,7 @@ pub struct EnvStruct {
 
 /// Env holds the execution environment of the interpreter.
 #[derive(Clone)]
-pub struct Env(Arc<EnvStruct>);
+pub struct Env(Rc<EnvStruct>);
 
 impl fmt::Debug for Env {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -26,7 +26,7 @@ impl fmt::Debug for Env {
 
 impl Env {
     pub fn new(outer: Option<Env>) -> Self {
-        Env(Arc::new(EnvStruct {
+        Env(Rc::new(EnvStruct {
             data: RwLock::new(HashMap::default()),
             outer,
         }))
