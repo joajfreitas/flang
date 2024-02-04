@@ -1,53 +1,17 @@
 {
   "name": "v0_1",
   "tests": [
-	{
-    "id": 0,
-    "name": "nil",
-		"input": "nil",
-		"output": "nil"
-	},
-	{
-    "id": 1,
-    "name": "true",
-		"input": "true",
-		"output": "true"
-	},
-	{
-    "id": 2,
-    "name": "false",
-		"input": "false",
-		"output": "false"
-	},
-	{
-    "id": 3,
-    "name": "string",
-		"input": "\"hello world\"",
-		"output": "hello world"
-	},
-	{
-      "id": 4,
-      "name": "list",
-		"input": "'(1 2 3)",
-		"output": "(1 2 3)"
-	},
-	{
-      "id": 5,
-      "name": "vec",
-		"input": "[1 2 3]",
-		"output": "[1 2 3]"
-	},
-	{
-      "id": 6,
-      "name": "hash",
-		"input": "{\"a\" 1 \"b\" 2}",
-		"output": "{a 1 b 2}"
-	},
-	{
-      "id": 7,
-      "name": "function_application",
-		"input": "(+ 1 1)",
-		"output": "2"
-	}
-]
+    {"id": 0, "name": "nil", "input": "nil", "output": "nil"},
+    {"id": 1, "name": "true", "input": "true", "output": "true"},
+    {"id": 2, "name": "false", "input": "false", "output": "false"},
+    {"id": 3, "name": "string", "input": "\"hello world\"", "output": "hello world" },
+    {"id": 4, "name": "list", "input": "'(1 2 3)", "output": "(1 2 3)" },
+    {"id": 5, "name": "vec", "input": "[1 2 3]", "output": "[1 2 3]" },
+    {"id": 6, "name": "hash", "input": "{\"a\" 1 \"b\" 2}", "output": "{a 1 b 2}" },
+    {"id": 7, "name": "function_application", "input": "(+ 1 1)", "output": "2"},
+    {"id": 8, "name": "function_definition", "input": "(do (def! f (fn* (x y) (+ x y))) (f 2 3))", "output": "5"},
+    {"id": 9, "name": "closure", "input": "(do (def! f (fn* (x y) (+ x y))) (def! g (fn* (x) (f x x))) (g 2))", "output": "4"},
+    {"id": 10, "name": "closure_late_binding", "input": "(do (def! f (fn* (x) (+ x y))) (def! y 3) (f 2))", "output": "5"},
+    {"id": 11, "name": "datetime", "input": "d#2024-01-02T21:46:02Z", "output": "2024-01-02T21:46:02Z"}
+  ]
 }

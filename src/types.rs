@@ -7,13 +7,14 @@ use std::cell::RefCell;
 
 use crate::env::Env;
 use crate::types::MalErr::ErrString;
-use crate::types::MalVal::{Atom, Bool, Func, Hash, Int, List, MalFunc, Nil, Str, Sym, Vector};
+use crate::types::MalVal::{Atom, Bool, Func, Hash, Int, Datetime, List, MalFunc, Nil, Str, Sym, Vector};
 
 #[derive(Debug, Clone)]
 pub enum MalVal {
     Nil,
     Bool(bool),
     Int(i64),
+    Datetime(chrono::DateTime<chrono::Utc>),
     Str(String),
     Sym(String),
     List(Rc<Vec<MalVal>>, Rc<MalVal>),
@@ -63,6 +64,10 @@ impl MalVal {
 
     pub fn int(i: i64) -> Self {
         MalVal::Int(i)
+    }
+
+    pub fn datetime(d: chrono::DateTime<chrono::Utc>) -> Self {
+        MalVal::Datetime(d)
     }
 
     pub fn str(s: &str) -> Self {
@@ -194,6 +199,7 @@ impl MalVal {
             Nil => "nil".to_string(),
             Bool(_) => "bool".to_string(),
             Int(_) => "int".to_string(),
+            Datetime(_) => "datetime".to_string(),
             Str(_) => "str".to_string(),
             Sym(_) => "sym".to_string(),
             List(_, _) => "list".to_string(),

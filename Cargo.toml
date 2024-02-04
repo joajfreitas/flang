@@ -9,6 +9,7 @@ edition = "2021"
 regex = "1"
 itertools = "0.12"
 rand = "0.8"
+chrono = "0.4.33"
 
 [build-dependencies]
 serde = {version = "1.0", features = ["derive"]}

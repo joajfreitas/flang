@@ -146,7 +146,12 @@ fn read_atom(reader: &mut Reader) -> MalRet {
                 error("expected '\"', got EOF")
             } else if let Some(stripped) = token.strip_prefix(':') {
                 Ok(Str(format!("\u{29e}{}", stripped)))
-            } else {
+            } 
+            else if let Some(stripped) = token.strip_prefix("d#") {
+                let datetime = chrono::DateTime::parse_from_rfc3339(stripped).unwrap();
+                Ok(MalVal::datetime(chrono::DateTime::<chrono::Utc>::from(datetime)))
+            }
+            else {
                 Ok(Sym(token))
             }
         }

@@ -1,5 +1,5 @@
 use crate::types::MalVal;
-use crate::types::MalVal::{Atom, Bool, Func, Hash, Int, List, MalFunc, Nil, Str, Sym, Vector};
+use crate::types::MalVal::{Atom, Bool, Func, Hash, Int, List, MalFunc, Nil, Str, Sym, Vector, Datetime};
 
 fn escape_str(s: &str) -> String {
     s.chars()
@@ -22,6 +22,7 @@ impl MalVal {
                 true => "true".to_string(),
             },
             Int(i) => i.to_string(),
+            Datetime(d) => d.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
             Str(s) => {
                 if let Some(stripped) = s.strip_prefix('\u{29e}') {
                     format!(":{}", stripped)
