@@ -1,6 +1,6 @@
 use itertools::Itertools;
-use std::collections::HashMap;
-use std::rc::Rc;
+use std::collections::{HashMap, VecDeque};
+use std::sync::Arc;
 
 use crate::env::Env;
 use crate::reader::read_str;
@@ -90,10 +90,85 @@ fn eval_ast(ast: &MalVal, env: &Env) -> MalRet {
             for (k, v) in h.iter() {
                 hm.insert(k.to_string(), eval(v.clone(), env.clone())?);
             }
-            Ok(Hash(Rc::new(hm), Rc::new(Nil)))
+            Ok(MalVal::hash(&hm))
         }
         _ => Ok(ast.clone()),
     }
+}
+
+#[derive(PartialEq, Eq)]
+enum ParamParsing {
+    Param,
+    Rest,
+    Keyword,
+}
+
+fn eval_fn(a1: MalVal, a2: MalVal, env: &Env) -> MalRet {
+    let params: &Vec<MalVal> = match &a1 {
+        MalVal::Vector(params, _) | MalVal::List(params, _) => Ok(params),
+        _ => Err(MalErr::ErrString(
+            "expected param list after fn*".to_string(),
+        )),
+    }?;
+
+    let mut ps: VecDeque<String> = VecDeque::new();
+    for param in params {
+        match param {
+            Sym(s) => {
+                ps.push_back(s.to_string());
+            }
+            _ => {
+                return Err(MalErr::ErrString(
+                    "expected symbol in param list".to_string(),
+                ));
+            }
+        }
+    }
+
+    let mut params: Vec<MalVal> = Vec::new();
+    let mut rest_params: MalVal = MalVal::Nil;
+    let mut keyword_params: Vec<MalVal> = Vec::new();
+
+    let mut parsing_step = ParamParsing::Param;
+    loop {
+        if ps.len() == 0 {
+            break;
+        }
+
+        let param = ps.pop_front().unwrap();
+
+        if parsing_step == ParamParsing::Param && param == "&rest" {
+            parsing_step = ParamParsing::Rest;
+            continue;
+        } else if (parsing_step == ParamParsing::Rest || parsing_step == ParamParsing::Param)
+            && param == "&key"
+        {
+            parsing_step = ParamParsing::Keyword;
+            continue;
+        }
+
+        if parsing_step == ParamParsing::Param {
+            params.push(MalVal::Sym(param));
+        } else if parsing_step == ParamParsing::Rest {
+            rest_params = MalVal::Sym(param);
+        } else if parsing_step == ParamParsing::Keyword {
+            keyword_params.push(MalVal::Sym(param));
+        }
+    }
+
+    Ok(MalFunc {
+        eval,
+        ast: Arc::new(a2),
+        env: env.clone(),
+        params: Arc::new(MalVal::List(Arc::new(params), Arc::new(MalVal::Nil))),
+        keyword_params: Arc::new(MalVal::List(
+            Arc::new(keyword_params),
+            Arc::new(MalVal::Nil),
+        )),
+        rest_params: Arc::new(rest_params),
+        is_macro: false,
+        meta: Arc::new(Nil),
+    })
 }
 
 fn eval(mut ast: MalVal, mut env: Env) -> MalRet {
@@ -131,8 +206,10 @@ fn eval(mut ast: MalVal, mut env: Env) -> MalRet {
                                 ast: ast.clone(),
                                 env: env.clone(),
                                 params,
+                                keyword_params: Arc::new(MalVal::Nil),
+                                rest_params: Arc::new(MalVal::Nil),
                                 is_macro: true,
-                                meta: Rc::new(Nil),
+                                meta: Arc::new(Nil),
                             };
                             env.set(l[1].clone(), f)
                         }
@@ -218,14 +295,7 @@ fn eval(mut ast: MalVal, mut env: Env) -> MalRet {
                     }
                     Sym(ref a0) if a0 == "fn*" => {
                         let (a1, a2) = (l[1].clone(), l[2].clone());
-                        Ok(MalFunc {
-                            eval,
-                            ast: Rc::new(a2),
-                            env: env.clone(),
-                            params: Rc::new(a1),
-                            is_macro: false,
-                            meta: Rc::new(Nil),
-                        })
+                        eval_fn(a1, a2, &env)
                     }
                     Sym(ref a0sym) if a0sym == "eval" => {
                         ast = eval(l[1].clone(), env.clone())?;

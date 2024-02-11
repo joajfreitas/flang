@@ -9,4 +9,4 @@ mod types;
 pub use crate::env::Env;
 pub use crate::mal::rep;
 pub use crate::prelude::prelude;
-pub use crate::types::{MalErr, MalVal};
+pub use crate::types::{MalArgs, MalErr, MalRet, MalVal};

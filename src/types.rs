@@ -2,12 +2,13 @@ use itertools::Itertools;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt;
-use std::rc::Rc;
-use std::cell::RefCell;
+use std::sync::{Arc, RwLock};
 
 use crate::env::Env;
 use crate::types::MalErr::ErrString;
-use crate::types::MalVal::{Atom, Bool, Func, Hash, Int, Datetime, List, MalFunc, Nil, Str, Sym, Vector};
+use crate::types::MalVal::{
+    Atom, Bool, Datetime, Func, Hash, Int, List, MalFunc, Nil, Str, Sym, Vector,
+};
 
 #[derive(Debug, Clone)]
 pub enum MalVal {
@@ -17,19 +18,21 @@ pub enum MalVal {
     Datetime(chrono::DateTime<chrono::Utc>),
     Str(String),
     Sym(String),
-    List(Rc<Vec<MalVal>>, Rc<MalVal>),
-    Vector(Rc<Vec<MalVal>>, Rc<MalVal>),
-    Hash(Rc<HashMap<String, MalVal>>, Rc<MalVal>),
-    Func(fn(MalArgs) -> MalRet, Rc<MalVal>),
+    List(Arc<Vec<MalVal>>, Arc<MalVal>),
+    Vector(Arc<Vec<MalVal>>, Arc<MalVal>),
+    Hash(Arc<HashMap<String, MalVal>>, Arc<MalVal>),
+    Func(fn(MalArgs) -> MalRet, Arc<MalVal>),
     MalFunc {
         eval: fn(ast: MalVal, env: Env) -> MalRet,
-        ast: Rc<MalVal>,
+        ast: Arc<MalVal>,
         env: Env,
-        params: Rc<MalVal>,
+        params: Arc<MalVal>,
+        keyword_params: Arc<MalVal>,
+        rest_params: Arc<MalVal>,
         is_macro: bool,
-        meta: Rc<MalVal>,
+        meta: Arc<MalVal>,
     },
-    Atom(Rc<RefCell<MalVal>>),
+    Atom(Arc<RwLock<MalVal>>),
 }
 
 #[derive(Debug)]
@@ -46,11 +49,11 @@ pub fn error(s: &str) -> MalRet {
 }
 
 pub fn func(f: fn(MalArgs) -> MalRet) -> MalVal {
-    Func(f, Rc::new(Nil))
+    Func(f, Arc::new(Nil))
 }
 
 pub fn atom(mv: &MalVal) -> MalVal {
-    Atom(Rc::new(RefCell::new(mv.clone())))
+    Atom(Arc::new(RwLock::new(mv.clone())))
 }
 
 impl MalVal {
@@ -79,19 +82,19 @@ impl MalVal {
     }
 
     pub fn list(l: &[MalVal]) -> Self {
-        MalVal::List(Rc::new(l.to_vec()), Rc::new(MalVal::nil()))
+        MalVal::List(Arc::new(l.to_vec()), Arc::new(MalVal::nil()))
     }
 
     pub fn vector(l: &[MalVal]) -> Self {
-        MalVal::Vector(Rc::new(l.to_vec()), Rc::new(MalVal::nil()))
+        MalVal::Vector(Arc::new(l.to_vec()), Arc::new(MalVal::nil()))
     }
 
     pub fn hash(h: &HashMap<String, MalVal>) -> MalVal {
-        MalVal::Hash(Rc::new(h.clone()), Rc::new(MalVal::nil()))
+        MalVal::Hash(Arc::new(h.clone()), Arc::new(MalVal::nil()))
     }
 
     pub fn func(f: fn(MalArgs) -> MalRet) -> MalVal {
-        MalVal::Func(f, Rc::new(MalVal::nil()))
+        MalVal::Func(f, Arc::new(MalVal::nil()))
     }
 
     pub fn keyword(&self) -> MalRet {
@@ -143,7 +146,7 @@ impl MalVal {
 
     pub fn deref(&self) -> MalRet {
         match self {
-            Atom(a) => Ok(a.borrow().clone()),
+            Atom(a) => Ok(a.read().unwrap().clone()),
             _ => error("attempt to deref a non-Atom"),
         }
     }
@@ -151,7 +154,7 @@ impl MalVal {
     pub fn reset_bang(&self, new: &MalVal) -> MalRet {
         match self {
             Atom(a) => {
-                *a.borrow_mut() = new.clone();
+                *a.write().unwrap() = new.clone();
                 Ok(new.clone())
             }
             _ => error("attempt to reset! a non-Atom"),
@@ -163,9 +166,9 @@ impl MalVal {
             Atom(a) => {
                 let f = &args[0];
                 let mut fargs = args[1..].to_vec();
-                fargs.insert(0, a.borrow().clone());
-                *a.borrow_mut() = f.apply(fargs)?;
-                Ok(a.borrow().clone())
+                fargs.insert(0, a.read().unwrap().clone());
+                *a.write().unwrap() = f.apply(fargs)?;
+                Ok(a.read().unwrap().clone())
             }
             _ => error("attempt to swap! a non-Atom"),
         }
@@ -187,7 +190,7 @@ impl MalVal {
             | Hash(_, ref mut meta)
             | Func(_, ref mut meta)
             | MalFunc { ref mut meta, .. } => {
-                *meta = Rc::new((*new_meta).clone());
+                *meta = Arc::new((*new_meta).clone());
             }
             _ => return error("with-meta not supported by type"),
         };
@@ -272,7 +275,7 @@ pub fn _assoc(mut hm: HashMap<String, MalVal>, kvs: MalArgs) -> MalRet {
             _ => return error("key is not string"),
         }
     }
-    Ok(Hash(Rc::new(hm), Rc::new(Nil)))
+    Ok(Hash(Arc::new(hm), Arc::new(Nil)))
 }
 
 pub fn _dissoc(mut hm: HashMap<String, MalVal>, ks: MalArgs) -> MalRet {
@@ -287,7 +290,7 @@ pub fn _dissoc(mut hm: HashMap<String, MalVal>, ks: MalArgs) -> MalRet {
             }
         }
     }
-    Ok(Hash(Rc::new(hm), Rc::new(Nil)))
+    Ok(Hash(Arc::new(hm), Arc::new(Nil)))
 }
 
 pub fn hash_map(kvs: MalArgs) -> MalRet {

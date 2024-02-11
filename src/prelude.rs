@@ -65,27 +65,6 @@ fn slurp(f: String) -> MalRet {
     }
 }
 
-// (render "some_template.f" meta)
-/*
-fn render(a: MalArgs) -> MalRet {
-    let meta = match &a[1] {
-        Hash(ref hm, _) => hm,
-        _ => panic!(),
-    };
-
-    let file = match &a[0] {
-        Str(s) => s,
-        _ => panic!(),
-    };
-
-    let mut s = String::new();
-    match File::open(file.to_string()).and_then(|mut f| f.read_to_string(&mut s)) {
-        Ok(_) => Ok(Str(s)),
-        Err(e) => {println!("{}", file.to_string()); error(&e.to_string())},
-    }
-}
-*/
-
 fn car(a: MalArgs) -> MalRet {
     match &a[0] {
         Vector(v, _) | List(v, _) => {
@@ -258,7 +237,11 @@ fn contains_q(a: MalArgs) -> MalRet {
 
 fn keys(a: MalArgs) -> MalRet {
     match a[0] {
-        Hash(ref hm, _) => Ok(MalVal::list(&hm.keys().map(|k| { Str(k.to_string()) }).collect::<Vec<MalVal>>())),
+        Hash(ref hm, _) => Ok(MalVal::list(
+            &hm.keys()
+                .map(|k| Str(k.to_string()))
+                .collect::<Vec<MalVal>>(),
+        )),
         _ => error("keys requires Hash Map"),
     }
 }
@@ -287,7 +270,7 @@ fn seq(a: MalArgs) -> MalRet {
         List(ref v, _) | Vector(ref v, _) => Ok(MalVal::list(&v.to_vec())),
         Str(ref s) if s.is_empty() => Ok(Nil),
         Str(ref s) if !a[0].keyword_q() => {
-            let v: Vec<MalVal> = s.chars().map(|c| { Str(c.to_string()) }).collect();
+            let v: Vec<MalVal> = s.chars().map(|c| Str(c.to_string())).collect();
             Ok(MalVal::list(&v))
         }
         Nil => Ok(Nil),
@@ -308,10 +291,11 @@ fn conj(a: MalArgs) -> MalRet {
 
 fn split(a: MalArgs) -> MalRet {
     match (a[0].clone(), a[1].clone()) {
-        (Str(sp), Str(st)) => Ok(MalVal::vector(&st
-            .split(&sp[..])
-            .map(|a| Str(a.to_string()))
-            .collect::<Vec<MalVal>>())),
+        (Str(sp), Str(st)) => Ok(MalVal::vector(
+            &st.split(&sp[..])
+                .map(|a| Str(a.to_string()))
+                .collect::<Vec<MalVal>>(),
+        )),
         _ => error("split: arguments are not strings"),
     }
 }
