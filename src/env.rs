@@ -43,11 +43,11 @@ impl Env {
                 for (i, b) in binds.iter().enumerate() {
                     match b {
                         Sym(s) if s == "&" => {
-                            env.set(binds[i + 1].clone(), MalVal::list(&exprs[i..]))?;
+                            env.set(&binds[i + 1], MalVal::list(&exprs[i..]))?;
                             break;
                         }
                         _ => {
-                            env.set(b.clone(), exprs[i].clone())?;
+                            env.set(b, exprs[i].clone())?;
                         }
                     }
                 }
@@ -65,7 +65,7 @@ impl Env {
         &self.0.data
     }
 
-    pub fn set(&self, key: MalVal, value: MalVal) -> MalRet {
+    pub fn set(&self, key: &MalVal, value: MalVal) -> MalRet {
         let s = match key {
             Sym(s) => s,
             _ => {
@@ -75,7 +75,10 @@ impl Env {
             }
         };
 
-        self.data().write().unwrap().insert(s, value.clone());
+        self.data()
+            .write()
+            .unwrap()
+            .insert(s.to_string(), value.clone());
         Ok(value)
     }
 

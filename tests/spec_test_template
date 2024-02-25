@@ -1,7 +1,17 @@
 #[test]
 fn {name}() {{
     let env = prelude();
-    assert_eq!(rep(r#"{input}"#, &env).unwrap(), "{output}");
+    let output = rep(r#"{input}"#, &env);
+
+
+    if output.is_err() {{
+      println!("{{:?}}", output);
+    }}
+
+    assert!(output.is_ok());
+
+
+    assert_eq!(output.unwrap(), "{output}");
     //let input = include_str!("{path}/input-data");
     //let expected_output = include_str!("{path}/output-data");
 

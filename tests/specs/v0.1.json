@@ -12,6 +12,14 @@
     {"id": 8, "name": "function_definition", "input": "(do (def! f (fn* (x y) (+ x y))) (f 2 3))", "output": "5"},
     {"id": 9, "name": "closure", "input": "(do (def! f (fn* (x y) (+ x y))) (def! g (fn* (x) (f x x))) (g 2))", "output": "4"},
     {"id": 10, "name": "closure_late_binding", "input": "(do (def! f (fn* (x) (+ x y))) (def! y 3) (f 2))", "output": "5"},
-    {"id": 11, "name": "datetime", "input": "d#2024-01-02T21:46:02Z", "output": "2024-01-02T21:46:02Z"}
+    {"id": 11, "name": "datetime", "input": "d#2024-01-02T21:46:02Z", "output": "2024-01-02T21:46:02Z"},
+    {"id": 12, "name": "function_with_rest_keyword", "input": "(do (def! f (fn* (x y &rest rest) (+ x (+ y (sum rest))))) (f 1 2 3 4 5))", "output": "15"},
+    {"id": 13, "name": "function_with_keyword", "input": "(do (def! f (fn* (&key a &key b) (+ a b) )) (f :a 1 :b 2))", "output": "3"},
+    {
+      "id": 14, 
+      "name": "function_with_positional_and_keyword_args", 
+      "input": "(do (def! f (fn* (x y &key a &key b) (sum (list a b x y) ))) (f 1 2 :a 3 :b 4))", 
+      "output": "10"
+    }
   ]
 }

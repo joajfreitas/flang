@@ -131,7 +131,7 @@ fn eval_fn(a1: MalVal, a2: MalVal, env: &Env) -> MalRet {
 
     let mut parsing_step = ParamParsing::Param;
     loop {
-        if ps.len() == 0 {
+        if ps.is_empty() {
             break;
         }
 
@@ -190,9 +190,7 @@ fn eval(mut ast: MalVal, mut env: Env) -> MalRet {
                 }
 
                 match &l[0] {
-                    Sym(ref a0) if a0 == "def!" => {
-                        env.set(l[1].clone(), eval(l[2].clone(), env.clone())?)
-                    }
+                    Sym(ref a0) if a0 == "def!" => env.set(&l[1], eval(l[2].clone(), env.clone())?),
                     Sym(ref a0) if a0 == "defmacro!" => match eval(l[2].clone(), env.clone())? {
                         MalFunc {
                             eval,
@@ -211,7 +209,7 @@ fn eval(mut ast: MalVal, mut env: Env) -> MalRet {
                                 is_macro: true,
                                 meta: Arc::new(Nil),
                             };
-                            env.set(l[1].clone(), f)
+                            env.set(&l[1], f)
                         }
                         _ => error("defmacro on non-function"),
                     },
@@ -223,8 +221,7 @@ fn eval(mut ast: MalVal, mut env: Env) -> MalRet {
                                 for (b, e) in binds.iter().tuples() {
                                     match b {
                                         Sym(_) => {
-                                            let _ =
-                                                env.set(b.clone(), eval(e.clone(), env.clone())?);
+                                            let _ = env.set(b, eval(e.clone(), env.clone())?);
                                         }
                                         _ => {
                                             return error("let* with non-Sym binding");
@@ -314,11 +311,57 @@ fn eval(mut ast: MalVal, mut env: Env) -> MalRet {
                                     ast: mast,
                                     env: menv,
                                     params,
+                                    rest_params,
                                     ..
                                 } => {
-                                    let a = (*mast).clone();
                                     let p = (*params).clone();
-                                    env = Env::bind(Some(menv.clone()), p.clone(), args)?;
+                                    let params: Vec<MalVal> = match &p {
+                                        Vector(ps, _) | List(ps, _) => ps.to_vec(),
+                                        _ => panic!(),
+                                    };
+                                    let a = (*mast).clone();
+                                    let positional_args = args[0..params.len()].to_vec();
+                                    let rest_args = MalVal::list(&args[params.len()..]);
+                                    env = Env::bind(
+                                        Some(menv.clone()),
+                                        dbg!(p.clone()),
+                                        dbg!(positional_args),
+                                    )?;
+                                    env.set(&rest_params, rest_args);
+
+                                    dbg!(&params);
+                                    dbg!(&args);
+                                    dbg!(args[params.len()..].iter().collect::<Vec<&MalVal>>());
+                                    let kws = args[params.len()..]
+                                        .chunks(2)
+                                        .filter(|xs| match &xs[0] {
+                                            MalVal::Str(s) => {
+                                                dbg!(s.chars().next().unwrap()) == '\u{29e}'
+                                            }
+                                            _ => false,
+                                        })
+                                        .map(|xs| {
+                                            (
+                                                match &xs[0] {
+                                                    MalVal::Str(s) => s,
+                                                    _ => panic!(),
+                                                },
+                                                &xs[1],
+                                            )
+                                        })
+                                        .collect::<Vec<(&String, &MalVal)>>();
+
+                                    dbg!(&kws);
+
+                                    for (key, value) in kws {
+                                        env.set(
+                                            &MalVal::Sym(dbg!(key.chars().collect::<Vec<char>>()
+                                                [1..]
+                                                .iter()
+                                                .collect::<String>())),
+                                            value.clone(),
+                                        );
+                                    }
                                     ast = a.clone();
                                     continue 'tco;
                                 }
