@@ -70,7 +70,7 @@ impl Env {
             Sym(s) => s,
             _ => {
                 return Err(ErrString(
-                    "Env set called with something that is not a String".to_string(),
+                    "Env set called with something that is not a Symbol".to_string(),
                 ))
             }
         };
