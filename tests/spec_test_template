@@ -1,0 +1,21 @@
+#[test]
+fn {name}() {{
+    let env = prelude();
+    let output = rep(r#"{input}"#, &env);
+
+
+    if output.is_err() {{
+      println!("{{:?}}", output);
+    }}
+
+    assert!(output.is_ok());
+
+
+    assert_eq!(output.unwrap(), "{output}");
+    //let input = include_str!("{path}/input-data");
+    //let expected_output = include_str!("{path}/output-data");
+
+    //let actual_output = functionality_under_test(input);
+
+    //assert_eq!(expected_output, actual_output);
+}}

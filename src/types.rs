@@ -1,31 +1,34 @@
-use colored::*;
 use itertools::Itertools;
+use std::cmp::Ordering;
+use std::collections::HashMap;
 use std::fmt;
-use std::sync::Arc;
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
 
-use fnv::FnvHashMap;
-
-use crate::env::{env_bind, Env};
+use crate::env::Env;
 use crate::types::MalErr::ErrString;
-use crate::types::MalVal::{Atom, Bool, Func, Hash, Int, List, MalFunc, Nil, Str, Sym, Vector};
+use crate::types::MalVal::{
+    Atom, Bool, Datetime, Func, Hash, Int, List, MalFunc, Nil, Str, Sym, Vector,
+};
 
 #[derive(Debug, Clone)]
 pub enum MalVal {
     Nil,
     Bool(bool),
     Int(i64),
+    Datetime(chrono::DateTime<chrono::Utc>),
     Str(String),
     Sym(String),
     List(Arc<Vec<MalVal>>, Arc<MalVal>),
     Vector(Arc<Vec<MalVal>>, Arc<MalVal>),
-    Hash(Arc<FnvHashMap<String, MalVal>>, Arc<MalVal>),
+    Hash(Arc<HashMap<String, MalVal>>, Arc<MalVal>),
     Func(fn(MalArgs) -> MalRet, Arc<MalVal>),
     MalFunc {
         eval: fn(ast: MalVal, env: Env) -> MalRet,
         ast: Arc<MalVal>,
         env: Env,
         params: Arc<MalVal>,
+        keyword_params: Arc<MalVal>,
+        rest_params: Arc<MalVal>,
         is_macro: bool,
         meta: Arc<MalVal>,
     },
@@ -45,13 +48,6 @@ pub fn error(s: &str) -> MalRet {
     Err(ErrString(s.to_string()))
 }
 
-pub fn format_error(e: MalErr) -> String {
-    match e {
-        MalErr::ErrString(s) => format!("{}: {}", "Error".red(), s.clone()),
-        MalErr::ErrMalVal(v) => v.pr_str(true),
-    }
-}
-
 pub fn func(f: fn(MalArgs) -> MalRet) -> MalVal {
     Func(f, Arc::new(Nil))
 }
@@ -61,6 +57,46 @@ pub fn atom(mv: &MalVal) -> MalVal {
 }
 
 impl MalVal {
+    pub fn nil() -> Self {
+        MalVal::Nil
+    }
+
+    pub fn boolean(b: bool) -> Self {
+        MalVal::Bool(b)
+    }
+
+    pub fn int(i: i64) -> Self {
+        MalVal::Int(i)
+    }
+
+    pub fn datetime(d: chrono::DateTime<chrono::Utc>) -> Self {
+        MalVal::Datetime(d)
+    }
+
+    pub fn str(s: &str) -> Self {
+        MalVal::Str(s.to_string())
+    }
+
+    pub fn sym(s: &str) -> Self {
+        MalVal::Sym(s.to_string())
+    }
+
+    pub fn list(l: &[MalVal]) -> Self {
+        MalVal::List(Arc::new(l.to_vec()), Arc::new(MalVal::nil()))
+    }
+
+    pub fn vector(l: &[MalVal]) -> Self {
+        MalVal::Vector(Arc::new(l.to_vec()), Arc::new(MalVal::nil()))
+    }
+
+    pub fn hash(h: &HashMap<String, MalVal>) -> MalVal {
+        MalVal::Hash(Arc::new(h.clone()), Arc::new(MalVal::nil()))
+    }
+
+    pub fn func(f: fn(MalArgs) -> MalRet) -> MalVal {
+        MalVal::Func(f, Arc::new(MalVal::nil()))
+    }
+
     pub fn keyword(&self) -> MalRet {
         match self {
             Str(s) if s.starts_with('\u{29e}') => Ok(Str(s.to_string())),
@@ -84,7 +120,7 @@ impl MalVal {
                 ..
             } => {
                 let a = &**ast;
-                let fn_env = env_bind(Some(env.clone()), (**params).clone(), args)?;
+                let fn_env = Env::bind(Some(env.clone()), (**params).clone(), args)?;
                 eval(a.clone(), fn_env)
             }
             _ => error("attempt to call non-function"),
@@ -166,6 +202,7 @@ impl MalVal {
             Nil => "nil".to_string(),
             Bool(_) => "bool".to_string(),
             Int(_) => "int".to_string(),
+            Datetime(_) => "datetime".to_string(),
             Str(_) => "str".to_string(),
             Sym(_) => "sym".to_string(),
             List(_, _) => "list".to_string(),
@@ -211,7 +248,22 @@ impl PartialEq for MalVal {
     }
 }
 
-pub fn _assoc(mut hm: FnvHashMap<String, MalVal>, kvs: MalArgs) -> MalRet {
+impl Eq for MalVal {}
+
+impl PartialOrd for MalVal {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        match (self, other) {
+            (Nil, Nil) => None,
+            (Bool(ref a), Bool(ref b)) => Some(a.cmp(b)),
+            (Int(ref a), Int(ref b)) => Some(a.cmp(b)),
+            (Str(ref a), Str(ref b)) => Some(a.cmp(b)),
+            (Sym(ref a), Sym(ref b)) => Some(a.cmp(b)),
+            _ => None,
+        }
+    }
+}
+
+pub fn _assoc(mut hm: HashMap<String, MalVal>, kvs: MalArgs) -> MalRet {
     if kvs.len() % 2 != 0 {
         return error("odd number of elements");
     }
@@ -226,7 +278,7 @@ pub fn _assoc(mut hm: FnvHashMap<String, MalVal>, kvs: MalArgs) -> MalRet {
     Ok(Hash(Arc::new(hm), Arc::new(Nil)))
 }
 
-pub fn _dissoc(mut hm: FnvHashMap<String, MalVal>, ks: MalArgs) -> MalRet {
+pub fn _dissoc(mut hm: HashMap<String, MalVal>, ks: MalArgs) -> MalRet {
     for k in ks.iter() {
         match k {
             Str(ref s) => {
@@ -242,6 +294,6 @@ pub fn _dissoc(mut hm: FnvHashMap<String, MalVal>, ks: MalArgs) -> MalRet {
 }
 
 pub fn hash_map(kvs: MalArgs) -> MalRet {
-    let hm: FnvHashMap<String, MalVal> = FnvHashMap::default();
+    let hm: HashMap<String, MalVal> = HashMap::default();
     _assoc(hm, kvs)
 }

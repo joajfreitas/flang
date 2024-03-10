@@ -2,11 +2,9 @@ extern crate regex;
 
 use regex::{Captures, Regex};
 
-use std::sync::Arc;
-
 use crate::types::hash_map;
 use crate::types::MalErr::ErrString;
-use crate::types::MalVal::{Bool, Int, List, Nil, Str, Sym, Vector};
+use crate::types::MalVal::{Bool, Int, Nil, Str, Sym};
 use crate::types::{error, MalErr, MalRet, MalVal};
 
 #[derive(Debug, Clone)]
@@ -59,33 +57,48 @@ fn read_form(reader: &mut Reader) -> MalRet {
     match &token[..] {
         "'" => {
             let _ = reader.next();
-            Ok(list![Sym("quote".to_string()), read_form(reader)?])
+            Ok(MalVal::list(&[
+                Sym("quote".to_string()),
+                read_form(reader)?,
+            ]))
         }
         "`" => {
             let _ = reader.next();
-            Ok(list![Sym("quasiquote".to_string()), read_form(reader)?])
+            Ok(MalVal::list(&[
+                Sym("quasiquote".to_string()),
+                read_form(reader)?,
+            ]))
         }
         "~" => {
             let _ = reader.next();
-            Ok(list![Sym("unquote".to_string()), read_form(reader)?])
+            Ok(MalVal::list(&[
+                Sym("unquote".to_string()),
+                read_form(reader)?,
+            ]))
         }
         "~@" => {
             let _ = reader.next();
-            Ok(list![Sym("splice-unquote".to_string()), read_form(reader)?])
+            Ok(MalVal::list(&[
+                Sym("splice-unquote".to_string()),
+                read_form(reader)?,
+            ]))
         }
 
         "@" => {
             let _ = reader.next();
-            Ok(list![Sym("deref".to_string()), read_form(reader)?])
+            Ok(MalVal::list(&[
+                Sym("deref".to_string()),
+                read_form(reader)?,
+            ]))
         }
         "^" => {
             let _ = reader.next();
             let meta = read_form(reader)?;
-            Ok(list![
+            Ok(MalVal::list(&[
                 Sym("with-meta".to_string()),
                 read_form(reader)?,
-                meta
-            ])
+                meta,
+            ]))
         }
         "(" => read_seq(reader, ")"),
         "[" => read_seq(reader, "]"),
@@ -115,8 +128,8 @@ fn read_seq(reader: &mut Reader, end: &str) -> MalRet {
 
     let _ = reader.next();
     match end {
-        ")" => Ok(list!(seq)),
-        "]" => Ok(vector!(seq)),
+        ")" => Ok(MalVal::list(&seq)),
+        "]" => Ok(MalVal::vector(&seq)),
         "}" => hash_map(seq),
         _ => error("read_seq unknown end value"),
     }
@@ -148,6 +161,11 @@ fn read_atom(reader: &mut Reader) -> MalRet {
                 error("expected '\"', got EOF")
             } else if let Some(stripped) = token.strip_prefix(':') {
                 Ok(Str(format!("\u{29e}{}", stripped)))
+            } else if let Some(stripped) = token.strip_prefix("d#") {
+                let datetime = chrono::DateTime::parse_from_rfc3339(stripped).unwrap();
+                Ok(MalVal::datetime(chrono::DateTime::<chrono::Utc>::from(
+                    datetime,
+                )))
             } else {
                 Ok(Sym(token))
             }

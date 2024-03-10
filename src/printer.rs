@@ -1,5 +1,7 @@
 use crate::types::MalVal;
-use crate::types::MalVal::{Atom, Bool, Func, Hash, Int, List, MalFunc, Nil, Str, Sym, Vector};
+use crate::types::MalVal::{
+    Atom, Bool, Datetime, Func, Hash, Int, List, MalFunc, Nil, Str, Sym, Vector,
+};
 
 fn escape_str(s: &str) -> String {
     s.chars()
@@ -22,6 +24,7 @@ impl MalVal {
                 true => "true".to_string(),
             },
             Int(i) => i.to_string(),
+            Datetime(d) => d.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
             Str(s) => {
                 if let Some(stripped) = s.strip_prefix('\u{29e}') {
                     format!(":{}", stripped)
@@ -35,7 +38,10 @@ impl MalVal {
             List(l, _) => pr_seq(l, print_readably, "(", ")", " "),
             Vector(v, _) => pr_seq(v, print_readably, "[", "]", " "),
             Hash(hm, _) => {
-                let l: Vec<MalVal> = hm
+                let mut l: Vec<(String, MalVal)> =
+                    hm.iter().map(|(a, b)| (a.clone(), b.clone())).collect();
+                l.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Greater));
+                let l: Vec<MalVal> = l
                     .iter()
                     .flat_map(|(k, v)| vec![Str(k.to_string()), v.clone()])
                     .collect();
@@ -47,13 +53,6 @@ impl MalVal {
         }
     }
 }
-
-/*
-pub fn pr_seq(seq: &Vec<MalVal>, start: &str, end: &str) -> String {
-    let atoms: Vec<String> = seq.iter().map(|x| x.pr_str()).collect();
-    format!("{}{}{}", start, atoms.join(" "), end)
-}
-*/
 
 pub fn pr_seq(seq: &[MalVal], print_readably: bool, start: &str, end: &str, join: &str) -> String {
     let strs: Vec<String> = seq.iter().map(|x| x.pr_str(print_readably)).collect();
