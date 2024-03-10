@@ -322,11 +322,8 @@ fn eval(mut ast: MalVal, mut env: Env) -> MalRet {
                                     let a = (*mast).clone();
                                     let positional_args = args[0..params.len()].to_vec();
                                     let rest_args = MalVal::list(&args[params.len()..]);
-                                    env = Env::bind(
-                                        Some(menv.clone()),
-                                        p.clone(),
-                                        positional_args,
-                                    )?;
+                                    env =
+                                        Env::bind(Some(menv.clone()), p.clone(), positional_args)?;
 
                                     if *rest_params != MalVal::Nil {
                                         env.set(&rest_params, rest_args)?;
@@ -335,9 +332,7 @@ fn eval(mut ast: MalVal, mut env: Env) -> MalRet {
                                     let kws = args[params.len()..]
                                         .chunks(2)
                                         .filter(|xs| match &xs[0] {
-                                            MalVal::Str(s) => {
-                                                s.starts_with('\u{29e}')
-                                            }
+                                            MalVal::Str(s) => s.starts_with('\u{29e}'),
                                             _ => false,
                                         })
                                         .map(|xs| {
@@ -353,10 +348,11 @@ fn eval(mut ast: MalVal, mut env: Env) -> MalRet {
 
                                     for (key, value) in kws {
                                         env.set(
-                                            &MalVal::Sym(key.chars().collect::<Vec<char>>()
-                                                [1..]
-                                                .iter()
-                                                .collect::<String>()),
+                                            &MalVal::Sym(
+                                                key.chars().collect::<Vec<char>>()[1..]
+                                                    .iter()
+                                                    .collect::<String>(),
+                                            ),
                                             value.clone(),
                                         )?;
                                     }
